@@ -94,15 +94,22 @@ function renderPlan(result) {
     const whyRows = card.why.map((w) => `
       <div class="why-row ${w.strongest ? 'strongest' : ''}">
         <span class="who">${escapeHtml(w.member)}</span>
-        <span class="bar"><i style="width:${Math.round(w.affinity * 100)}%"></i></span>
-        <span class="pct">${Math.round(w.affinity * 100)}%</span>
+        ${w.affinity === null
+          ? '<span class="bar"><i style="width:0%"></i></span><span class="pct">no data</span>'
+          : `<span class="bar"><i style="width:${Math.round(w.affinity * 100)}%"></i></span><span class="pct">${Math.round(w.affinity * 100)}%</span>`}
         <span class="reason">${escapeHtml(w.reason)}</span>
       </div>`).join('');
+    const evidenceLine = (card.evidence && card.evidence.length)
+      ? `<div class="evidence">${card.evidence.map(escapeHtml).join(' · ')}</div>` : '';
+    const overlapLine = card.lowOverlap
+      ? '<div class="note">Honest caveat: overlap across this group is weak - this is the best available compromise, not a pick everyone loves.</div>' : '';
     el.innerHTML = `
       <div class="kind">${escapeHtml(card.label)}</div>
       <h3 class="display">${escapeHtml(card.name)}</h3>
       ${card.note ? `<div class="note">${escapeHtml(card.note)}</div>` : ''}
-      <div class="score-line">Compromise score (maximin): ${(card.score * 100).toFixed(0)}% - picked so the least-excited person still wins${card.sample ? ' - SAMPLE' : ''}</div>
+      <div class="score-line">Compromise score (maximin): ${(card.score * 100).toFixed(0)}% - picked so the least-excited person still wins${card.groupOnly ? ' - group signal only, no per-member evidence' : ''}${typeof card.coverage === 'number' ? ` - evidence for ${Math.round(card.coverage * 100)}% of members` : ''}${card.sample ? ' - SAMPLE' : ''}</div>
+      ${overlapLine}
+      ${evidenceLine}
       <div class="why">${whyRows}</div>
       <div class="actions">
         <button class="ghost" data-veto="${escapeHtml(card.id)}">veto this pick</button>

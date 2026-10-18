@@ -119,7 +119,7 @@ async function buildCandidates(domain, resolved, live, city, constraints, trace)
       const picks = await qloo.insights(domain.target, {
         entityIds: ids,
         locationQuery: domain.target === 'urn:entity:place' ? cityParam(city) : undefined,
-        extra: { take: domain.take * 3, ...(vetoed.size ? { 'filter.exclude.entities': [...vetoed].join(',') } : {}) },
+        extra: { take: domain.take * 3, ...(constraints.maxPrice ? { 'filter.price_level.max': constraints.maxPrice } : {}), ...(vetoed.size ? { 'filter.exclude.entities': [...vetoed].join(',') } : {}) },
       });
       perMember.push(new Map(picks.map((p) => [p.id, p.affinity !== undefined ? p.affinity : 0])));
     } catch {
@@ -144,30 +144,58 @@ function attributeSample(picks, resolved, trace, domain) {
 function scoreAndPick(cands, resolved, domain, trace) {
   if (!cands || !cands.picks || !cands.picks.length) return null;
   const scored = cands.picks.map((p) => {
+    // Honesty rule: a member with no per-member Qloo signal for this
+    // candidate is UNKNOWN, never a fabricated number. Maximin runs over
+    // known evidence only, and the card reports how much evidence exists.
     const affs = resolved.map((_, i) => {
       const a = cands.perMember[i].get(p.id);
-      return typeof a === 'number' ? a : (p.affinity || 0) * 0.5;
+      return typeof a === 'number' ? a : null;
     });
-    const min = Math.min(...affs);
-    const avg = affs.reduce((s, x) => s + x, 0) / affs.length;
-    const bestIdx = affs.indexOf(Math.max(...affs));
-    return { pick: p, affs, min, avg, bestIdx };
+    const known = affs.filter((a) => a !== null);
+    const coverage = known.length / affs.length;
+    // No per-member evidence at all: fall back to the union-signal affinity,
+    // flagged as group-signal-only so the UI can say so.
+    const groupOnly = known.length === 0;
+    const base = groupOnly ? (p.affinity || 0) : Math.min(...known);
+    const avg = known.length ? known.reduce((s2, x) => s2 + x, 0) / known.length : (p.affinity || 0);
+    const bestIdx = affs.indexOf(known.length ? Math.max(...known) : -1);
+    return { pick: p, affs, min: base, avg, bestIdx, coverage, groupOnly };
   });
-  scored.sort((a, b) => (b.min - a.min) || (b.avg - a.avg));
+  // Rank: real per-member evidence first, then maximin, then average.
+  scored.sort((a, b) => (b.coverage - a.coverage) || (b.min - a.min) || (b.avg - a.avg));
   const winner = scored[0];
-  tracePush(trace, 'score', `${domain.label}: "${winner.pick.name}" wins - least-excited member still scores ${(winner.min * 100).toFixed(0)}% (maximin compromise)`, null);
+  const lowOverlap = winner.min < 0.2;
+  tracePush(trace, 'score', `${domain.label}: "${winner.pick.name}" wins - least-excited evidenced member scores ${(winner.min * 100).toFixed(0)}% (maximin, evidence for ${Math.round(winner.coverage * 100)}% of members)${winner.groupOnly ? ' - group signal only' : ''}${lowOverlap ? ' - weak overlap, best available' : ''}`, null);
+  const explainBits = [];
+  if (winner.pick.explain) {
+    const ex = winner.pick.explain;
+    const tags = (ex.tags || ex.signal_tags || []).slice(0, 4);
+    const ents = (ex.entities || ex.signal_entities || []).slice(0, 3).map((e) => (typeof e === 'string' ? e : e.name));
+    if (tags.length) explainBits.push(`Qloo explainability tags: ${tags.join(', ')}`);
+    if (ents.length) explainBits.push(`driven by: ${ents.join(', ')}`);
+  }
   const why = resolved.map((m, i) => {
     const seeds = m.entities.slice(0, 2).map((e) => e.name);
+    const a = winner.affs[i];
     return {
       member: m.label,
-      affinity: winner.affs[i],
+      affinity: a,
       strongest: winner.bestIdx === i,
-      reason: seeds.length
-        ? `aligns with ${m.label}'s ${seeds.join(' + ')} signal in Qloo's taste graph`
-        : `no grounded likes for ${m.label}; carried by the group signal`,
+      reason: a === null
+        ? `no Qloo signal linking this pick to ${m.label}'s likes - shown as unknown, not guessed`
+        : seeds.length
+          ? `aligns with ${m.label}'s ${seeds.join(' + ')} signal in Qloo's taste graph`
+          : `carried by the group signal`,
     };
   });
-  return { domain: domain.key, label: domain.label, ...winner.pick, score: winner.min, why };
+  return {
+    domain: domain.key, label: domain.label, ...winner.pick,
+    score: winner.min, why,
+    coverage: winner.coverage,
+    groupOnly: winner.groupOnly,
+    lowOverlap,
+    evidence: explainBits,
+  };
 }
 
 // Full planning run.
