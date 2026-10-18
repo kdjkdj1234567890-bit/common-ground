@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Common Ground - an agent that ends "what should we do?" deadlock</title>
+<meta name="description" content="A group-decision agent powered by the Qloo taste graph. Everyone lists a few things they love; the agent finds the picks nobody would have suggested but everyone will enjoy.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1 class="display">Common <span class="mark">Ground</span></h1>
+      <p class="subtitle">Three friends, zero agreement on dinner, a movie, or music.
+      Everyone lists a few things they love - the agent finds the plan nobody would have
+      suggested and everyone will enjoy, and shows its work.</p>
+    </div>
+    <div class="badges">
+      <span class="badge">Qloo Taste AI&trade; inside</span>
+      <span class="badge" id="modeBadge">checking mode&hellip;</span>
+    </div>
+  </header>
+
+  <div class="banner" id="sampleBanner" hidden></div>
+
+  <div class="grid">
+    <section class="panel" aria-label="Group setup">
+      <div class="row-between">
+        <h2>The group</h2>
+        <button class="link-btn" id="loadSample" type="button">load a sample group</button>
+      </div>
+      <div id="members"></div>
+      <div class="row-between">
+        <button class="ghost" id="addMember" type="button">+ add person</button>
+        <span style="font-size:12px;color:var(--ink-faint)">2-6 people</span>
+      </div>
+      <label class="field-label" for="city">Where are you going out?</label>
+      <select id="city">
+        <option>New York</option>
+        <option>Los Angeles</option>
+        <option>London</option>
+        <option>Tokyo</option>
+        <option selected>Seoul</option>
+      </select>
+      <button class="primary" id="go" type="button">Find common ground</button>
+      <div class="error" id="err"></div>
+    </section>
+
+    <main>
+      <div class="trace" id="trace" aria-live="polite"></div>
+      <div class="cards" id="cards"><div class="empty" id="empty">
+        Add the group, press the button, and watch the agent negotiate.<br>
+        It resolves everyone's likes against Qloo's taste graph, finds the overlap,
+        and explains each pick per person.
+      </div></div>
+      <div class="chips" id="chips" hidden>
+        <span style="font-size:12.5px;color:var(--ink-faint);align-self:center">Push back:</span>
+        <button class="chip" data-constraint="cheaper">make it cheaper</button>
+        <button class="chip" data-constraint="different">not feeling these - show others</button>
+      </div>
+    </main>
+  </div>
+
+  <footer>
+    <p><strong>What this is.</strong> Common Ground is an agentic planner: it grounds free-text
+    likes to real entities with Qloo Entity Search, pulls cross-domain taste affinities from the
+    Qloo Insights API (music &harr; film &harr; dining), scores candidates by <em>maximin</em>
+    (the least-excited person still wins), and replans when someone pushes back.</p>
+    <p><strong>What the numbers mean.</strong> Qloo affinities describe aggregate cultural
+    patterns across large groups - they are evidence of association, never a prediction about
+    any individual. No names, emails, or other personal data are ever sent to Qloo; only taste
+    signals (entity IDs) leave this app. The Qloo API key stays server-side.</p>
+    <p>Built for the Qloo Agentic Hackathon. Open source (MIT).</p>
+  </footer>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
