@@ -193,7 +193,7 @@ function renderConsensus(result) {
   const allIn = members.length > 0 && members.every((m) => state.accepted.includes(m));
   if (allIn) {
     const picks = result.plan.map((c) => `${c.label}: ${c.name}`).join(' + ');
-    box.innerHTML = `<div class="agreed-banner">Deadlock broken - ${members.map(escapeHtml).join(', ')} all agreed.<br><strong>${escapeHtml(picks)}</strong><br><span class="agreed-sub">Consensus reached after ${state.vetoes.length} veto${state.vetoes.length === 1 ? '' : 's'}. This is the group's decision, recorded from their own accept votes.</span></div>`;
+    box.innerHTML = `<div class="agreed-banner">Deadlock broken - ${members.map(escapeHtml).join(', ')} all agreed.<br><strong>${escapeHtml(picks)}</strong><br><span class="agreed-sub">Consensus reached after ${state.vetoes.length} veto${state.vetoes.length === 1 ? '' : 'es'}. This is the group's decision, recorded from their own accept votes.</span></div>`;
     return;
   }
   box.innerHTML = `<div class="consensus-box"><div class="consensus-q">Is everyone in? Each person answers for themselves:</div><div class="accept-row" id="acceptRow"></div></div>`;
