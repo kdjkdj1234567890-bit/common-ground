@@ -11,7 +11,10 @@
 // Numbers depend on live Qloo responses and drift over time.
 
 const BASE = process.argv[2] || 'https://common-ground-kdjkdj1234567890-bits-projects.vercel.app';
+const START = parseInt(process.env.START || '0', 10);
+const COUNT = parseInt(process.env.COUNT || String(SCENARIOS_LEN_PLACEHOLDER), 10);
 const CITY = 'New York';
+const SCENARIOS_LEN_PLACEHOLDER = 10;
 
 const SCENARIOS = [
   { id: 'S1', members: [['Mia', 'Frank Ocean, Studio Ghibli, ramen'], ['Jordan', 'Christopher Nolan, Radiohead, steakhouse'], ['Sam', 'lofi hip hop, Everything Everywhere All at Once, vegan bowls']] },
@@ -42,10 +45,10 @@ const baseline = await post('/api/baseline', { city: CITY });
 if (baseline.mode !== 'live') throw new Error('baseline not in live mode: ' + baseline.mode);
 const baseByDomain = Object.fromEntries(baseline.baseline.map((b) => [b.domain, b.name]));
 
-console.log('| Scenario | Domain | Group pick | Compromise score | Coverage | Generic pick | Differs? |');
-console.log('|---|---|---|---|---|---|---|');
+if (START === 0) { console.log('| Scenario | Domain | Group pick | Compromise score | Coverage | Generic pick | Differs? |');
+console.log('|---|---|---|---|---|---|---|'); }
 let n = 0, diff = 0, sumCov = 0, sumScore = 0, weak = 0, errors = 0;
-for (const sc of SCENARIOS) {
+for (const sc of SCENARIOS.slice(START, START + COUNT)) {
   try {
     const res = await post('/api/plan', {
       city: CITY,
@@ -65,6 +68,6 @@ for (const sc of SCENARIOS) {
   await sleep(1500); // be gentle with the hackathon rate limit
 }
 console.log('');
-console.log(`Scenarios: ${SCENARIOS.length} (${errors} errors). Domain picks: ${n}.`);
+console.log(`Chunk start=${START} count=${COUNT} (${errors} errors). Domain picks: ${n}.`);
 console.log(`Mean coverage: ${(100 * sumCov / Math.max(n, 1)).toFixed(0)}%. Mean compromise score: ${(100 * sumScore / Math.max(n, 1)).toFixed(0)}%.`);
 console.log(`Differs from popularity-only baseline: ${diff}/${n} (${(100 * diff / Math.max(n, 1)).toFixed(0)}%). Weak-overlap picks: ${weak}/${n}.`);

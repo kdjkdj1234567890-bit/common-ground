@@ -44,6 +44,14 @@ chatbot guessing; with Qloo every suggestion carries an affinity provenance.
 The whole loop is visible in the UI as a live trace, because an agent you can't
 watch is just a form.
 
+## Evaluation
+
+Reproducible 10-scenario comparison of the taste-aware plan against a
+popularity-only baseline over the same Qloo catalog: the group pick differs
+from the generic pick in 30/30 domain comparisons. Full table, method and
+honest limitations in [EVALUATION.md](EVALUATION.md); re-run with
+`node scripts/evaluate.mjs`.
+
 ## Qloo usage (request -> result, redacted)
 
 - `GET /v2/search?query=<like>` - free text -> entity candidates for grounding.
