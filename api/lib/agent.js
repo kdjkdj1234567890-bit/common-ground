@@ -44,8 +44,12 @@ async function resolveMembers(members, live, trace) {
       let ent = null;
       if (live) {
         try {
-          const hits = await qloo.searchEntities(like, null, 3);
-          ent = hits[0] || null;
+          const hits = await qloo.searchEntities(like, null, 5);
+          // First-hit acceptance is naive: "sushi" resolves to an actor,
+          // "techno" to a YouTuber. Prefer a non-person match when one
+          // exists in the top hits; people are rarely what a group
+          // means by a like, and the trace shows what was picked.
+          ent = hits.find((h) => h.type !== 'urn:entity:person') || hits[0] || null;
           if (ent) {
             tracePush(trace, 'resolve', `Resolved "${like}" -> ${ent.name}`, ent.id);
           } else {

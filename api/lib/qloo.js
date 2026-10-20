@@ -10,16 +10,31 @@ function hasKey() {
   return API_KEY.length > 0;
 }
 
-async function qlooGet(path, params) {
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// The hackathon key is rate-limited. Space calls politely and back off
+// on 429 instead of failing the whole plan.
+let lastCallAt = 0;
+const MIN_GAP_MS = 400;
+
+async function qlooGet(path, params, attempt = 0) {
   const url = new URL(BASE_URL + path);
   for (const [k, v] of Object.entries(params || {})) {
     if (v === undefined || v === null || v === '') continue;
     url.searchParams.set(k, String(v));
   }
+  const gap = Date.now() - lastCallAt;
+  if (gap < MIN_GAP_MS) await sleep(MIN_GAP_MS - gap);
+  lastCallAt = Date.now();
   const res = await fetch(url, {
     headers: { 'X-Api-Key': API_KEY, 'Accept': 'application/json' },
   });
   const text = await res.text();
+  if (res.status === 429 && attempt < 3) {
+    const wait = [3000, 8000, 15000][attempt];
+    await sleep(wait);
+    return qlooGet(path, params, attempt + 1);
+  }
   let body;
   try { body = JSON.parse(text); } catch { body = { raw: text }; }
   if (!res.ok) {
