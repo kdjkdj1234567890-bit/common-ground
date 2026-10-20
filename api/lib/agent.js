@@ -165,8 +165,11 @@ function scoreAndPick(cands, resolved, domain, trace) {
     const bestIdx = affs.indexOf(known.length ? Math.max(...known) : -1);
     return { pick: p, affs, min: base, avg, bestIdx, coverage, groupOnly };
   });
-  // Rank: real per-member evidence first, then maximin, then average.
-  scored.sort((a, b) => (b.coverage - a.coverage) || (b.min - a.min) || (b.avg - a.avg));
+  // Rank: maximin over evidenced members first; group-signal-only picks
+  // (zero per-member evidence) always rank below evidenced ones. Coverage
+  // breaks ties, it never outweighs the least-excited member's score.
+  scored.sort((a, b) => ((b.groupOnly ? -1 : 0) - (a.groupOnly ? -1 : 0))
+    || (b.min - a.min) || (b.coverage - a.coverage) || (b.avg - a.avg));
   const winner = scored[0];
   const lowOverlap = winner.min < 0.2;
   tracePush(trace, 'score', `${domain.label}: "${winner.pick.name}" wins - least-excited evidenced member scores ${(winner.min * 100).toFixed(0)}% (maximin, evidence for ${Math.round(winner.coverage * 100)}% of members)${winner.groupOnly ? ' - group signal only' : ''}${lowOverlap ? ' - weak overlap, best available' : ''}`, null);
