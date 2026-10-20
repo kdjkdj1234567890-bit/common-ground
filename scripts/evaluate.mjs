@@ -11,10 +11,7 @@
 // Numbers depend on live Qloo responses and drift over time.
 
 const BASE = process.argv[2] || 'https://common-ground-kdjkdj1234567890-bits-projects.vercel.app';
-const START = parseInt(process.env.START || '0', 10);
-const COUNT = parseInt(process.env.COUNT || String(SCENARIOS_LEN_PLACEHOLDER), 10);
 const CITY = 'New York';
-const SCENARIOS_LEN_PLACEHOLDER = 10;
 
 const SCENARIOS = [
   { id: 'S1', members: [['Mia', 'Frank Ocean, Studio Ghibli, ramen'], ['Jordan', 'Christopher Nolan, Radiohead, steakhouse'], ['Sam', 'lofi hip hop, Everything Everywhere All at Once, vegan bowls']] },
@@ -28,6 +25,9 @@ const SCENARIOS = [
   { id: 'S9', members: [['Wes', 'Tame Impala, sci-fi novels, craft beer'], ['Xiu', 'Jay Chou, wuxia films, hot pot'], ['Yara', 'Shakira, telenovelas, ceviche']] },
   { id: 'S10', members: [['Zoe', 'Lana Del Rey, Sofia Coppola, pasta'], ['Alex', 'Nirvana, Quentin Tarantino, burgers'], ['Sam', 'Yo-Yo Ma, nature documentaries, salads']] },
 ];
+
+const START = parseInt(process.env.START || '0', 10);
+const COUNT = parseInt(process.env.COUNT || String(SCENARIOS.length), 10);
 
 async function post(path, body) {
   const r = await fetch(BASE + path, {

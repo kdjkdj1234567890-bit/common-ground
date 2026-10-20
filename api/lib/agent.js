@@ -19,7 +19,10 @@ const qloo = require('./qloo');
 const sample = require('./sample-data');
 
 const DOMAINS = [
-  { key: 'dinner', target: 'urn:entity:place', label: 'Dinner', take: 8 },
+  { key: 'dinner', target: 'urn:entity:place', label: 'Dinner', take: 8,
+    // Dinner means restaurants: without this tag filter Qloo's place graph
+    // happily returns high-affinity landmarks, hotels and museums.
+    tags: ['urn:tag:category:place:restaurant'] },
   { key: 'movie', target: 'urn:entity:movie', label: 'Movie', take: 6 },
   { key: 'music', target: 'urn:entity:artist', label: 'Playlist', take: 6 },
 ];
@@ -104,6 +107,7 @@ async function buildCandidates(domain, resolved, live, city, constraints, trace)
   try {
     unionPicks = await qloo.insights(domain.target, {
       entityIds: unionIds,
+      tags: domain.tags || [],
       locationQuery: domain.target === 'urn:entity:place' ? cityParam(city) : undefined,
       extra,
     });
@@ -122,6 +126,7 @@ async function buildCandidates(domain, resolved, live, city, constraints, trace)
     try {
       const picks = await qloo.insights(domain.target, {
         entityIds: ids,
+        tags: domain.tags || [],
         locationQuery: domain.target === 'urn:entity:place' ? cityParam(city) : undefined,
         extra: { take: domain.take * 3, ...(constraints.maxPrice ? { 'filter.price_level.max': constraints.maxPrice } : {}), ...(vetoed.size ? { 'filter.exclude.entities': [...vetoed].join(',') } : {}) },
       });
@@ -260,6 +265,7 @@ async function baseline({ city }) {
       try {
         picks = await qloo.insights(domain.target, {
           entityIds: [],
+          tags: domain.tags || [],
           locationQuery: cityParam(city),
           extra: { take: 5 },
         });
