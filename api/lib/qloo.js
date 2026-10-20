@@ -56,34 +56,43 @@ async function insights(targetType, { entityIds = [], tags = [], locationQuery, 
   return normalizeInsights(data);
 }
 
+function resultList(data) {
+  // /v2/search returns results as an array; /v2/insights returns
+  // results as an object with an entities array. Handle both.
+  if (Array.isArray(data.results)) return data.results;
+  if (data.results && Array.isArray(data.results.entities)) return data.results.entities;
+  return data.entities || data.data || [];
+}
+
 function normalizeEntities(data) {
-  const list = data.results || data.entities || data.data || [];
-  return list.map((e) => ({
+  return resultList(data).map((e) => ({
     id: e.entity_id || e.id,
     name: e.name,
-    type: e.type || e.subtype,
+    type: e.subtype || e.type,
     tags: (e.tags || []).map((t) => t.name).slice(0, 6),
     popularity: e.popularity,
-    image: e.image && e.image.url,
+    image: (e.image && e.image.url) || (e.properties && e.properties.image && e.properties.image.url) || null,
     description: e.description || (e.properties && e.properties.description) || '',
   }));
 }
 
 function normalizeInsights(data) {
-  const list = data.results || data.entities || data.data || [];
-  return list.map((e) => ({
-    id: e.entity_id || e.id,
-    name: e.name,
-    type: e.type || e.subtype,
-    affinity: e.affinity !== undefined ? e.affinity : e.score,
-    popularity: e.popularity,
-    image: e.image && e.image.url,
-    explain: e.explainability || e.explanation || null,
-    tags: (e.tags || []).map((t) => t.name).slice(0, 6),
-    address: e.properties && (e.properties.address || (e.properties.geocode && e.properties.geocode.name)),
-    rating: e.properties && (e.properties.business_rating || e.properties.rating),
-    priceLevel: e.properties && e.properties.price_level,
-  }));
+  return resultList(data).map((e) => {
+    const q = e.query || {};
+    return {
+      id: e.entity_id || e.id,
+      name: e.name,
+      type: e.subtype || e.type,
+      affinity: q.affinity !== undefined ? q.affinity : (e.affinity !== undefined ? e.affinity : e.score),
+      popularity: e.popularity,
+      image: (e.image && e.image.url) || (e.properties && e.properties.image && e.properties.image.url) || null,
+      explain: q.explainability || e.explainability || null,
+      tags: (e.tags || []).map((t) => t.name).slice(0, 6),
+      address: e.properties && (typeof e.properties.address === 'string' ? e.properties.address : (e.properties.geocode && e.properties.geocode.name)),
+      rating: e.properties && (e.properties.business_rating || e.properties.rating),
+      priceLevel: e.properties && e.properties.price_level,
+    };
+  });
 }
 
 module.exports = { hasKey, searchEntities, insights, BASE_URL };

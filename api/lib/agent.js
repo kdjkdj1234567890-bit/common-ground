@@ -168,12 +168,18 @@ function scoreAndPick(cands, resolved, domain, trace) {
   tracePush(trace, 'score', `${domain.label}: "${winner.pick.name}" wins - least-excited evidenced member scores ${(winner.min * 100).toFixed(0)}% (maximin, evidence for ${Math.round(winner.coverage * 100)}% of members)${winner.groupOnly ? ' - group signal only' : ''}${lowOverlap ? ' - weak overlap, best available' : ''}`, null);
   const explainBits = [];
   if (winner.pick.explain) {
-    const ex = winner.pick.explain;
-    const tags = (ex.tags || ex.signal_tags || []).slice(0, 4);
-    const ents = (ex.entities || ex.signal_entities || []).slice(0, 3).map((e) => (typeof e === 'string' ? e : e.name));
-    if (tags.length) explainBits.push(`Qloo explainability tags: ${tags.join(', ')}`);
-    if (ents.length) explainBits.push(`driven by: ${ents.join(', ')}`);
+    // Live Qloo shape: { 'signal.interests.entities': [{entity_id, score}] } -
+    // the members' own likes that drove this pick, with influence scores.
+    const drivers = winner.pick.explain['signal.interests.entities'] || [];
+    const names = [];
+    for (const d of drivers.slice(0, 4)) {
+      const hit = resolved.flatMap((m) => m.entities).find((e) => (e.id || '').toUpperCase() === String(d.entity_id || '').toUpperCase());
+      names.push(hit ? hit.name : null);
+    }
+    const known = names.filter(Boolean);
+    if (known.length) explainBits.push(`Qloo explainability: driven by the group's ${known.join(' + ')} signal`);
   }
+  if (winner.pick.tags && winner.pick.tags.length) explainBits.push(`taste tags: ${winner.pick.tags.slice(0, 4).join(', ')}`);
   const why = resolved.map((m, i) => {
     const seeds = m.entities.slice(0, 2).map((e) => e.name);
     const a = winner.affs[i];
