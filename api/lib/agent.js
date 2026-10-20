@@ -144,13 +144,18 @@ function attributeSample(picks, resolved, trace, domain) {
 }
 
 // Step 7: maximin scoring - the best pick is the one where the LEAST
-// happy member is still happy. Tie-break on group average.
+// happy member is still happy. Members with no evidence are not ignored:
+// they count as a cautious neutral prior, so incomplete coverage is
+// treated as uncertainty, never as a silent pass.
+const UNKNOWN_PRIOR = 0.5;
 function scoreAndPick(cands, resolved, domain, trace) {
   if (!cands || !cands.picks || !cands.picks.length) return null;
   const scored = cands.picks.map((p) => {
     // Honesty rule: a member with no per-member Qloo signal for this
-    // candidate is UNKNOWN, never a fabricated number. Maximin runs over
-    // known evidence only, and the card reports how much evidence exists.
+    // candidate is UNKNOWN, never a fabricated number. The card reports
+    // how much evidence exists, and the maximin counts unknown members
+    // at a cautious 50% prior instead of dropping them - so a pick known
+    // for only 1 of 3 members cannot outrank a pick the whole group likes.
     const affs = resolved.map((_, i) => {
       const a = cands.perMember[i].get(p.id);
       return typeof a === 'number' ? a : null;
@@ -160,19 +165,21 @@ function scoreAndPick(cands, resolved, domain, trace) {
     // No per-member evidence at all: fall back to the union-signal affinity,
     // flagged as group-signal-only so the UI can say so.
     const groupOnly = known.length === 0;
-    const base = groupOnly ? (p.affinity || 0) : Math.min(...known);
+    const adjusted = affs.map((a) => (a === null ? UNKNOWN_PRIOR : a));
+    const base = groupOnly ? (p.affinity || 0) : Math.min(...adjusted);
+    const minKnown = known.length ? Math.min(...known) : null;
     const avg = known.length ? known.reduce((s2, x) => s2 + x, 0) / known.length : (p.affinity || 0);
     const bestIdx = affs.indexOf(known.length ? Math.max(...known) : -1);
-    return { pick: p, affs, min: base, avg, bestIdx, coverage, groupOnly };
+    return { pick: p, affs, min: base, minKnown, avg, bestIdx, coverage, groupOnly };
   });
-  // Rank: maximin over evidenced members first; group-signal-only picks
-  // (zero per-member evidence) always rank below evidenced ones. Coverage
-  // breaks ties, it never outweighs the least-excited member's score.
+  // Rank: uncertainty-adjusted maximin first (unknown members counted at
+  // the 50% prior); group-signal-only picks always rank below evidenced
+  // ones. Raw coverage breaks ties.
   scored.sort((a, b) => ((b.groupOnly ? -1 : 0) - (a.groupOnly ? -1 : 0))
     || (b.min - a.min) || (b.coverage - a.coverage) || (b.avg - a.avg));
   const winner = scored[0];
   const lowOverlap = winner.min < 0.2;
-  tracePush(trace, 'score', `${domain.label}: "${winner.pick.name}" wins - least-excited evidenced member scores ${(winner.min * 100).toFixed(0)}% (maximin, evidence for ${Math.round(winner.coverage * 100)}% of members)${winner.groupOnly ? ' - group signal only' : ''}${lowOverlap ? ' - weak overlap, best available' : ''}`, null);
+  tracePush(trace, 'score', `${domain.label}: "${winner.pick.name}" wins - compromise score ${(winner.min * 100).toFixed(0)}% (maximin; unknown members counted at a cautious ${(UNKNOWN_PRIOR * 100).toFixed(0)}% prior, evidence for ${Math.round(winner.coverage * 100)}% of members)${winner.groupOnly ? ' - group signal only' : ''}${lowOverlap ? ' - weak overlap, best available' : ''}`, null);
   const explainBits = [];
   if (winner.pick.explain) {
     // Live Qloo shape: { 'signal.interests.entities': [{entity_id, score}] } -

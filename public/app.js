@@ -123,7 +123,7 @@ function renderCards(result) {
       <div class="kind">${escapeHtml(card.label)}</div>
       <h3 class="display">${escapeHtml(card.name)}</h3>
       ${card.note ? `<div class="note">${escapeHtml(card.note)}</div>` : ''}
-      <div class="score-line">Compromise score (maximin): ${(card.score * 100).toFixed(0)}% - picked so the least-excited person still wins${card.groupOnly ? ' - group signal only, no per-member evidence' : ''}${typeof card.coverage === 'number' ? ` - evidence for ${Math.round(card.coverage * 100)}% of members` : ''}${card.sample ? ' - SAMPLE' : ''}</div>
+      <div class="score-line">Compromise score (maximin): ${(card.score * 100).toFixed(0)}% - picked so the least-excited person still wins; members with no Qloo signal count at a cautious 50% prior, never ignored${card.groupOnly ? ' - group signal only, no per-member evidence' : ''}${typeof card.coverage === 'number' ? ` - evidence for ${Math.round(card.coverage * 100)}% of members` : ''}${card.sample ? ' - SAMPLE' : ''}</div>
       ${overlapLine}
       ${evidenceLine}
       <div class="why">${whyRows}</div>
