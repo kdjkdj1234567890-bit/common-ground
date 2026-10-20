@@ -15,6 +15,10 @@ const state = {
   vetoes: [],
   constraints: {},
   mode: 'sample',
+  accepted: [],
+  baseline: null,
+  baselineCity: null,
+  showBaseline: false,
 };
 
 const SAMPLE_GROUP = [
@@ -82,8 +86,20 @@ function renderTrace(trace) {
 }
 
 function renderPlan(result) {
-  cardsEl.innerHTML = '';
   $('#empty')?.remove();
+  state.lastPlan = result;
+  renderCards(result);
+  if (!result.plan.length) return;
+  chipsEl.hidden = false;
+  // A new plan (or replan) resets the group's acceptance - the compromise
+  // changed, so the question "is everyone in?" must be answered again.
+  state.accepted = [];
+  renderConsensus(result);
+  renderBaselineToggle();
+}
+
+function renderCards(result) {
+  cardsEl.innerHTML = '';
   if (!result.plan.length) {
     cardsEl.innerHTML = '<div class="empty">The agent found nothing that clears the bar. Loosen a constraint and try again.</div>';
     return;
@@ -111,6 +127,7 @@ function renderPlan(result) {
       ${overlapLine}
       ${evidenceLine}
       <div class="why">${whyRows}</div>
+      ${baselineLine(card)}
       <div class="actions">
         <button class="ghost" data-veto="${escapeHtml(card.id)}">veto this pick</button>
       </div>`;
@@ -122,7 +139,77 @@ function renderPlan(result) {
       replan(`vetoed one pick`);
     });
   });
-  chipsEl.hidden = false;
+}
+
+// --- Popularity-only baseline (the honest control group) -------------
+function baselineLine(card) {
+  if (!state.showBaseline || !state.baseline) return '';
+  const b = state.baseline.find((x) => x.domain === card.domain);
+  if (!b) return '';
+  const same = b.name.trim().toLowerCase() === card.name.trim().toLowerCase();
+  const verdict = same
+    ? 'Same pick - popularity alone would have landed here.'
+    : 'Not the group pick - Qloo\'s taste graph changed this outcome.';
+  return `<div class="baseline-line">Generic popularity-only pick: <strong>${escapeHtml(b.name)}</strong> - ${verdict}</div>`;
+}
+
+function renderBaselineToggle() {
+  const zone = $('#baselineZone');
+  if (!zone) return;
+  zone.innerHTML = '';
+  const btn = document.createElement('button');
+  btn.className = 'ghost';
+  btn.id = 'baselineBtn';
+  btn.textContent = state.showBaseline
+    ? 'hide the generic-app comparison'
+    : 'what would a generic app pick? (popularity-only, no taste signal)';
+  btn.addEventListener('click', async () => {
+    state.showBaseline = !state.showBaseline;
+    const city = $('#city').value;
+    if (state.showBaseline && (!state.baseline || state.baselineCity !== city)) {
+      btn.textContent = 'asking Qloo for the popularity-only control group...';
+      btn.disabled = true;
+      try {
+        const res = await api('/api/baseline', { city });
+        state.baseline = res.baseline;
+        state.baselineCity = city;
+      } catch (e) {
+        errEl.textContent = e.message;
+      }
+      btn.disabled = false;
+    }
+    // re-render cards with the comparison lines
+    if (state.lastPlan) renderCards(state.lastPlan);
+    renderBaselineToggle();
+  });
+  zone.appendChild(btn);
+}
+
+// --- Consensus closure -------------------------------------------------
+function renderConsensus(result) {
+  const box = $('#consensus');
+  if (!box || !result || !result.session) return;
+  const members = result.session.members.map((m) => m.label);
+  const allIn = members.length > 0 && members.every((m) => state.accepted.includes(m));
+  if (allIn) {
+    const picks = result.plan.map((c) => `${c.label}: ${c.name}`).join(' + ');
+    box.innerHTML = `<div class="agreed-banner">Deadlock broken - ${members.map(escapeHtml).join(', ')} all agreed.<br><strong>${escapeHtml(picks)}</strong><br><span class="agreed-sub">Consensus reached after ${state.vetoes.length} veto${state.vetoes.length === 1 ? '' : 's'}. This is the group's decision, recorded from their own accept votes.</span></div>`;
+    return;
+  }
+  box.innerHTML = `<div class="consensus-box"><div class="consensus-q">Is everyone in? Each person answers for themselves:</div><div class="accept-row" id="acceptRow"></div></div>`;
+  const row = box.querySelector('#acceptRow');
+  members.forEach((m) => {
+    const b = document.createElement('button');
+    const isIn = state.accepted.includes(m);
+    b.className = 'accept-chip' + (isIn ? ' in' : '');
+    b.textContent = isIn ? `${m} is in` : `${m}?`;
+    b.addEventListener('click', () => {
+      if (state.accepted.includes(m)) state.accepted = state.accepted.filter((x) => x !== m);
+      else state.accepted.push(m);
+      renderConsensus(state.lastPlan);
+    });
+    row.appendChild(b);
+  });
 }
 
 async function run() {

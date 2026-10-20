@@ -240,4 +240,30 @@ async function plan({ members, city, constraints = {} }) {
   };
 }
 
-module.exports = { plan };
+// Popularity-only baseline: what the SAME Qloo catalog suggests for the
+// same city with zero taste signal - the generic "top picks near you"
+// answer any ratings app gives. This is the honest control group that
+// shows whether Qloo's taste graph actually changed the outcome.
+async function baseline({ city }) {
+  const live = qloo.hasKey();
+  const out = [];
+  for (const domain of DOMAINS) {
+    let picks = [];
+    if (live) {
+      try {
+        picks = await qloo.insights(domain.target, {
+          entityIds: [],
+          locationQuery: cityParam(city),
+          extra: { take: 5 },
+        });
+      } catch { picks = []; }
+    } else {
+      picks = sample.sampleInsights(domain.target, 1);
+    }
+    const top = [...picks].sort((a, b) => (b.popularity || 0) - (a.popularity || 0))[0];
+    if (top) out.push({ domain: domain.key, label: domain.label, name: top.name, popularity: top.popularity !== undefined ? top.popularity : null });
+  }
+  return { mode: live ? 'live' : 'sample', baseline: out };
+}
+
+module.exports = { plan, baseline };

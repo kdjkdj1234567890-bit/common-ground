@@ -116,3 +116,15 @@ footer p { max-width: 720px; margin-bottom: 6px; }
 
 .evidence { font-size: 12px; opacity: .72; margin: 6px 0 2px; }
 .why-row .pct { min-width: 52px; text-align: right; }
+
+/* Baseline comparison + consensus closure */
+.baseline-line { font-size: 12.5px; opacity: .8; margin-top: 8px; border-top: 1px dashed rgba(255,255,255,.14); padding-top: 8px; }
+.baseline-line strong { color: #e8b04b; }
+#baselineZone { margin: 14px 0 4px; }
+.consensus-box { margin-top: 14px; padding: 14px 16px; border: 1px solid rgba(255,255,255,.12); border-radius: 12px; }
+.consensus-q { font-size: 13px; opacity: .8; margin-bottom: 10px; }
+.accept-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.accept-chip { border: 1px solid rgba(255,255,255,.25); background: transparent; color: inherit; border-radius: 999px; padding: 7px 14px; cursor: pointer; font-size: 13px; }
+.accept-chip.in { background: #2f7d4f; border-color: #2f7d4f; color: #fff; }
+.agreed-banner { margin-top: 16px; padding: 18px 20px; border-radius: 14px; background: linear-gradient(135deg, #1f5136, #123524); border: 1px solid #3f9d68; font-size: 15px; line-height: 1.7; }
+.agreed-sub { font-size: 12px; opacity: .75; }
