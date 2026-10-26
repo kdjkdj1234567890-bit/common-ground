@@ -244,7 +244,7 @@ async function recoverUnknowns(card, cands, resolved, domain, live, city, constr
         entityIds: ids,
         tags: domain.tags || [],
         locationQuery: domain.target === 'urn:entity:place' ? cityParam(city) : undefined,
-        extra: { take: 60, ...(constraints.maxPrice ? { 'filter.price_level.max': constraints.maxPrice } : {}), ...(constraints.vetoes && constraints.vetoes.length ? { 'filter.exclude.entities': constraints.vetoes.join(',') } : {}) },
+        extra: { take: 50, ...(constraints.maxPrice ? { 'filter.price_level.max': constraints.maxPrice } : {}), ...(constraints.vetoes && constraints.vetoes.length ? { 'filter.exclude.entities': constraints.vetoes.join(',') } : {}) },
       });
       const before = cands.perMember[i].size;
       for (const p of deeper) {
@@ -255,8 +255,8 @@ async function recoverUnknowns(card, cands, resolved, domain, live, city, constr
         ? `Agent noticed missing evidence for ${m.label} on "${card.name}" and widened the search net - found a direct signal after all (was outside the first retrieval window)`
         : `Agent widened the search net for ${m.label} on "${card.name}" - still no direct signal, kept as honestly unknown`, null);
       if (cands.perMember[i].size > before) recovered++;
-    } catch {
-      tracePush(trace, 'recovery', `Agent's deeper search for ${m.label} failed - kept as honestly unknown`, null);
+    } catch (e) {
+      tracePush(trace, 'recovery', `Agent's deeper search for ${m.label} failed (${String(e.message || e).slice(0, 120)}) - kept as honestly unknown`, null);
     }
   }
   return recovered > 0;
