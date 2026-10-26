@@ -389,18 +389,29 @@ async function benchmark({ members, city }) {
       const known = raw.filter((a) => typeof a === 'number');
       if (!known.length) return null;
       const affs = raw.map((a) => (typeof a === 'number' ? a : UNKNOWN_PRIOR));
-      return { name: p.name, min: Math.min(...affs), mean: affs.reduce((s, x) => s + x, 0) / affs.length, coverage: known.length / raw.length };
+      return {
+        name: p.name,
+        min: Math.min(...affs),
+        mean: affs.reduce((s, x) => s + x, 0) / affs.length,
+        // Naive rule most group apps actually use: average only the evidence
+        // you have and ignore members with none.
+        meanKnown: known.reduce((s, x) => s + x, 0) / known.length,
+        coverage: known.length / raw.length,
+      };
     }).filter(Boolean);
     if (!scored.length) continue;
     const maximin = [...scored].sort((a, b) => b.min - a.min || b.mean - a.mean)[0];
     const meanPick = [...scored].sort((a, b) => b.mean - a.mean || b.min - a.min)[0];
+    const naivePick = [...scored].sort((a, b) => b.meanKnown - a.meanKnown || b.min - a.min)[0];
     domains.push({
       domain: domain.key, label: domain.label,
       candidates: scored.length,
       unknownBefore: before.unknown, unknownAfter: after.unknown, pairs: before.total,
       maximin: { name: maximin.name, floor: +maximin.min.toFixed(3), mean: +maximin.mean.toFixed(3) },
       meanPick: { name: meanPick.name, floor: +meanPick.min.toFixed(3), mean: +meanPick.mean.toFixed(3) },
+      naivePick: { name: naivePick.name, floor: +naivePick.min.toFixed(3), meanKnown: +naivePick.meanKnown.toFixed(3), coverage: +naivePick.coverage.toFixed(2) },
       differ: maximin.name !== meanPick.name,
+      differNaive: maximin.name !== naivePick.name,
     });
   }
   return { mode: live ? 'live' : 'sample', city: cityParam(city), domains };

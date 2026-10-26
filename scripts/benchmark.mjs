@@ -29,9 +29,9 @@ async function post(path, body) {
 
 const START = parseInt(process.env.START || '0', 10);
 const COUNT = parseInt(process.env.COUNT || String(SCENARIOS.length), 10);
-if (START === 0) console.log('| Scenario | Domain | Maximin pick (floor) | Mean pick (floor) | Differ? | Unknown pairs before -> after |');
-console.log('|---|---|---|---|---|---|');
-let n = 0, diff = 0, uBefore = 0, uAfter = 0, pairs = 0, liftSum = 0, liftPos = 0, errors = 0;
+if (START === 0) console.log('| Scenario | Domain | Maximin pick (floor) | Mean pick (floor) | Naive mean-of-known pick (floor) | Differs vs mean / vs naive | Unknown pairs before -> after |');
+console.log('|---|---|---|---|---|---|---|');
+let n = 0, diff = 0, diffNaive = 0, uBefore = 0, uAfter = 0, pairs = 0, liftSum = 0, liftPos = 0, liftNaiveSum = 0, liftNaivePos = 0, errors = 0;
 for (const sc of SCENARIOS.slice(START, START + COUNT)) {
   try {
     const res = await post('/api/benchmark', {
@@ -41,12 +41,14 @@ for (const sc of SCENARIOS.slice(START, START + COUNT)) {
     if (res.mode !== 'live') throw new Error('not live: ' + res.mode);
     for (const d of res.domains) {
       n++;
-      diff += d.differ ? 1 : 0;
+      diff += d.differ ? 1 : 0; diffNaive += d.differNaive ? 1 : 0;
       uBefore += d.unknownBefore; uAfter += d.unknownAfter; pairs += d.pairs;
       const lift = d.maximin.floor - d.meanPick.floor;
       liftSum += lift; if (lift > 0.005) liftPos++;
+      const liftN = d.maximin.floor - d.naivePick.floor;
+      liftNaiveSum += liftN; if (liftN > 0.005) liftNaivePos++;
       const pct = (x) => (x * 100).toFixed(0) + '%';
-      console.log(`| ${sc.id} | ${d.label} | ${d.maximin.name} (${pct(d.maximin.floor)}) | ${d.meanPick.name} (${pct(d.meanPick.floor)}) | ${d.differ ? 'yes' : 'no'} | ${d.unknownBefore} -> ${d.unknownAfter} |`);
+      console.log(`| ${sc.id} | ${d.label} | ${d.maximin.name} (${pct(d.maximin.floor)}) | ${d.meanPick.name} (${pct(d.meanPick.floor)}) | ${d.naivePick.name} (${pct(d.naivePick.floor)}) | ${d.differ ? 'yes' : 'no'} / ${d.differNaive ? 'yes' : 'no'} | ${d.unknownBefore} -> ${d.unknownAfter} |`);
     }
   } catch (e) {
     errors++;
@@ -55,6 +57,6 @@ for (const sc of SCENARIOS.slice(START, START + COUNT)) {
   await sleep(1500); // be gentle with the hackathon rate limit
 }
 console.log('');
-console.log(`Chunk start=${START} count=${COUNT}. Decisions: ${n} (${errors} errors). Rules picked differently: ${diff}/${n}.`);
+console.log(`Chunk start=${START} count=${COUNT}. Decisions: ${n} (${errors} errors). Maximin differs vs adjusted-mean: ${diff}/${n}; vs naive mean-of-known: ${diffNaive}/${n}.`);
 console.log(`Unknown evidence pairs: ${uBefore} -> ${uAfter} of ${pairs} (${uBefore ? (100 * (uBefore - uAfter) / uBefore).toFixed(0) : 0}% reduction by recovery).`);
-console.log(`Least-happy-member floor, maximin pick minus mean pick: mean lift ${(100 * liftSum / Math.max(n, 1)).toFixed(1)} pts; floor strictly higher in ${liftPos}/${n} decisions.`);
+console.log(`Least-happy-member floor, maximin pick minus adjusted-mean pick: mean lift ${(100 * liftSum / Math.max(n, 1)).toFixed(1)} pts, strictly higher in ${liftPos}/${n}; minus naive pick: mean lift ${(100 * liftNaiveSum / Math.max(n, 1)).toFixed(1)} pts, strictly higher in ${liftNaivePos}/${n}.`);
