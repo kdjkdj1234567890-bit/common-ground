@@ -41,8 +41,8 @@ chatbot guessing; with Qloo every suggestion carries an affinity provenance.
 7. **Replan** - vetoes add `filter.exclude.entities`; "make it cheaper" adds
    `filter.price_level.max=2`; the loop re-runs with the new constraints.
 
-The whole loop is visible in the UI as a live trace, because an agent you can't
-watch is just a form.
+The whole loop is rendered in the UI as a full step-by-step execution trace,
+because an agent you can't watch is just a form.
 
 ## Evaluation
 
@@ -74,12 +74,15 @@ honest limitations in [EVALUATION.md](EVALUATION.md); re-run with
 
 ## Multi-device by design (no accounts, no server state)
 
-The whole group session - members, likes, city, vetoes, accept votes,
-constraints - serializes into a shareable link. Everyone opens it on their
-own phone, adds or edits their own likes, taps their own answer, and passes
-the link back to the group chat. Consensus is assembled from real
-per-device input, while nothing is ever stored on a server: the session
-travels in the link itself.
+The whole group session - members, likes, city, vetoes, constraints, and
+the exact proposal being decided - serializes into a shareable link.
+Everyone opens it on their own phone, adds or edits their own likes, taps
+their own answer, and passes the link back to the group chat. Votes bind to
+the proposal: re-running the identical plan keeps them, a changed plan
+invalidates them. Consensus is assembled from real per-device input, while
+nothing is ever stored on a server: the session travels in the link itself.
+This is a deliberately sequential, pass-the-link model - not simultaneous
+multi-user - and votes are self-reported per device, not authenticated.
 
 ## Modes
 
@@ -122,6 +125,7 @@ vercel deploy --prod
 - Free-text likes that Qloo cannot ground are dropped (shown in the trace)
   rather than guessed.
 - Place results depend on Qloo's coverage of the chosen city.
-- Sessions are not simultaneous multi-user: the state travels in the share
-  link, so the latest link holds the latest votes. Nothing is stored
-  server-side, by design.
+- Sessions are sequential, not simultaneous: the state travels in the
+  share link, so the latest link holds the latest votes. Votes are
+  self-reported (anyone holding the link can click any name) - fine for
+  friend groups, not an authenticated ballot.

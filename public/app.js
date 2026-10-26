@@ -66,6 +66,12 @@ function encodeShareState() {
     vetoes: state.vetoes,
     accepted: state.accepted,
     constraints: state.constraints,
+    plan: state.lastPlan && state.lastPlan.plan && state.lastPlan.plan.length
+      ? {
+          pid: planIdOf(state.lastPlan.plan),
+          picks: state.lastPlan.plan.map((c) => ({ domain: c.domain, label: c.label, name: c.name, score: c.score })),
+        }
+      : null,
   };
   return btoa(unescape(encodeURIComponent(JSON.stringify(payload))))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -77,6 +83,13 @@ function decodeShareState(s) {
     const p = JSON.parse(decodeURIComponent(escape(atob(b))));
     return p && p.v === 1 ? p : null;
   } catch { return null; }
+}
+
+function planIdOf(plan) {
+  const ids = (plan || []).map((c) => c.id || c.name).join('|');
+  let h = 0;
+  for (let i = 0; i < ids.length; i++) { h = (h * 31 + ids.charCodeAt(i)) >>> 0; }
+  return 'p' + h.toString(36);
 }
 
 function syncShareHash() {
@@ -128,9 +141,11 @@ function renderPlan(result) {
   renderCards(result);
   if (!result.plan.length) return;
   chipsEl.hidden = false;
-  // A new plan (or replan) resets the group's acceptance - the compromise
-  // changed, so the question "is everyone in?" must be answered again.
-  state.accepted = [];
+  // Votes bind to the exact proposal: a new plan resets acceptance, the
+  // identical plan (same picks) keeps the votes already cast for it.
+  const pid = planIdOf(result.plan);
+  if (state.planId !== pid) state.accepted = [];
+  state.planId = pid;
   renderConsensus(result);
   renderBaselineToggle();
 }
@@ -160,7 +175,7 @@ function renderCards(result) {
       <div class="kind">${escapeHtml(card.label)}</div>
       <h3 class="display">${escapeHtml(card.name)}</h3>
       ${card.note ? `<div class="note">${escapeHtml(card.note)}</div>` : ''}
-      <div class="score-line">Compromise score (maximin): ${(card.score * 100).toFixed(0)}% - picked so the least-excited person still wins; members with no Qloo signal count at a cautious 50% prior, never ignored${card.groupOnly ? ' - group signal only, no per-member evidence' : ''}${typeof card.coverage === 'number' ? ` - evidence for ${Math.round(card.coverage * 100)}% of members` : ''}${card.sample ? ' - SAMPLE' : ''}</div>
+      <div class="score-line">Affinity-based compromise estimate (maximin): ${(card.score * 100).toFixed(0)}% - picked so the least-excited person still wins; members with no Qloo signal count at a cautious 50% prior, never ignored${card.groupOnly ? ' - group signal only, no per-member evidence' : ''}${typeof card.coverage === 'number' ? ` - evidence for ${Math.round(card.coverage * 100)}% of members` : ''}${card.sample ? ' - SAMPLE' : ''}</div>
       ${overlapLine}
       ${evidenceLine}
       <div class="why">${whyRows}</div>
@@ -251,6 +266,25 @@ function renderConsensus(result) {
   });
 }
 
+function renderSharedProposal(result) {
+  $('#empty')?.remove();
+  cardsEl.innerHTML = '';
+  const head = document.createElement('div');
+  head.className = 'consensus-box';
+  head.innerHTML = '<div class="consensus-q">This link carries the group\'s proposed plan. Answer for yourself below, then pass the updated link on - or press "Find common ground" to re-run the agent with your own edits.</div>';
+  cardsEl.appendChild(head);
+  for (const card of result.plan) {
+    const el = document.createElement('article');
+    el.className = 'card';
+    el.innerHTML = `
+      <div class="kind">${escapeHtml(card.label)}</div>
+      <h3 class="display">${escapeHtml(card.name)}</h3>
+      ${typeof card.score === 'number' ? `<div class="score-line">Affinity-based compromise estimate (maximin): ${(card.score * 100).toFixed(0)}%</div>` : ''}`;
+    cardsEl.appendChild(el);
+  }
+  renderConsensus(result);
+}
+
 async function run() {
   errEl.textContent = '';
   const members = parseMembers();
@@ -265,14 +299,14 @@ async function run() {
     const result = await api('/api/plan', {
       members,
       city: $('#city').value,
-      constraints: state.constraints,
+      constraints: { ...state.constraints, vetoes: state.vetoes },
     });
     state.session = result.session;
     state.mode = result.mode;
-    syncShareHash();
     setModeBadge(result.mode, result.note);
     renderTrace(result.trace);
     renderPlan(result);
+    syncShareHash();
   } catch (e) {
     errEl.textContent = e.message;
   } finally {
@@ -331,6 +365,20 @@ async function init() {
       note.textContent = 'Group session loaded from a shared link - add or edit your own likes, then pass the link on. Nothing is stored on a server; the session travels in the link.';
       note.hidden = false;
     }
+    // A shared link can carry the exact proposal being decided. Render it so
+    // recipients vote on the same plan, not a re-rolled one. Votes stay bound
+    // to this proposal id: re-running the identical plan keeps them, a changed
+    // plan invalidates them.
+    if (shared.plan && Array.isArray(shared.plan.picks) && shared.plan.picks.length) {
+      state.planId = shared.plan.pid || null;
+      state.lastPlan = {
+        mode: state.mode,
+        session: { members: state.members.map((m) => ({ label: (m.label || '').trim() || 'Someone' })), city: shared.city },
+        plan: shared.plan.picks.map((p) => ({ domain: p.domain, label: p.label, name: p.name, score: p.score, why: [] })),
+      };
+      if (state.planId && planIdOf(state.lastPlan.plan) !== state.planId) state.accepted = [];
+      renderSharedProposal(state.lastPlan);
+    }
   }
   renderMembers();
   const shareBtn = $('#shareBtn');
@@ -364,7 +412,6 @@ async function init() {
         chip.classList.add('on');
       }
       if (c === 'different') {
-        state.plan?.forEach?.(() => {});
         // veto everything currently shown and replan
         document.querySelectorAll('[data-veto]').forEach((b) => state.vetoes.push(b.dataset.veto));
       }
