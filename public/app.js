@@ -21,6 +21,21 @@ const state = {
   showBaseline: false,
 };
 
+const newMid = () => 'm' + Math.random().toString(36).slice(2, 9);
+// Votes key on a stable per-device member id, not the display label - two
+// members who happen to share a label stay distinct.
+function ensureMids() { state.members.forEach((m) => { if (!m.mid) m.mid = newMid(); }); }
+// The voting electorate: members with at least one like (same filter the
+// plan request uses).
+function electorate() {
+  return state.members.filter((m) => (m.likes || '').split(',').map((s) => s.trim()).filter(Boolean).length > 0);
+}
+// Proposal identity covers the full decision context - picks, city, vetoes
+// and membership - not just the entity ids.
+function currentCtx() {
+  return { city: $('#city').value, vetoes: state.vetoes, memberMids: electorate().map((m) => m.mid) };
+}
+
 const SAMPLE_GROUP = [
   { label: 'Mia', likes: 'Frank Ocean, Studio Ghibli, ramen', sample: true },
   { label: 'Jordan', likes: 'Christopher Nolan, Radiohead, steakhouse', sample: true },
@@ -28,6 +43,7 @@ const SAMPLE_GROUP = [
 ];
 
 function renderMembers() {
+  ensureMids();
   membersEl.innerHTML = '';
   state.members.forEach((m, i) => {
     const div = document.createElement('div');
@@ -61,15 +77,21 @@ function encodeShareState() {
     v: 1,
     members: state.members
       .filter((m) => (m.likes || '').trim() || (m.label || '').trim())
-      .map((m) => ({ label: m.label || '', likes: m.likes || '' })),
+      .map((m) => ({ mid: m.mid, label: m.label || '', likes: m.likes || '' })),
     city: $('#city').value,
     vetoes: state.vetoes,
     accepted: state.accepted,
     constraints: state.constraints,
     plan: state.lastPlan && state.lastPlan.plan && state.lastPlan.plan.length
       ? {
-          pid: planIdOf(state.lastPlan.plan),
-          picks: state.lastPlan.plan.map((c) => ({ domain: c.domain, label: c.label, name: c.name, score: c.score, id: c.id })),
+          pid: planIdOf(state.lastPlan.plan, currentCtx()),
+          picks: state.lastPlan.plan.map((c) => ({
+            domain: c.domain, label: c.label, name: c.name, score: c.score, id: c.id,
+            // Per-person evidence travels with the proposal so recipients see
+            // the justification, not just the pick names (reasons trimmed to
+            // keep the link portable).
+            why: (c.why || []).map((w) => ({ member: w.member, affinity: w.affinity, reason: String(w.reason || '').slice(0, 100) })),
+          })),
         }
       : null,
   };
@@ -85,8 +107,11 @@ function decodeShareState(s) {
   } catch { return null; }
 }
 
-function planIdOf(plan) {
-  const ids = (plan || []).map((c) => c.id || c.name).join('|');
+function planIdOf(plan, ctx) {
+  const ids = (plan || []).map((c) => c.id || c.name).join('|')
+    + '#' + String((ctx && ctx.city) || '')
+    + '#' + (ctx && ctx.vetoes ? [...ctx.vetoes].sort().join(',') : '')
+    + '#' + (ctx && ctx.memberMids ? ctx.memberMids.join(',') : '');
   let h = 0;
   for (let i = 0; i < ids.length; i++) { h = (h * 31 + ids.charCodeAt(i)) >>> 0; }
   return 'p' + h.toString(36);
@@ -143,7 +168,7 @@ function renderPlan(result) {
   chipsEl.hidden = false;
   // Votes bind to the exact proposal: a new plan resets acceptance, the
   // identical plan (same picks) keeps the votes already cast for it.
-  const pid = planIdOf(result.plan);
+  const pid = planIdOf(result.plan, currentCtx());
   if (state.planId !== pid) state.accepted = [];
   state.planId = pid;
   renderConsensus(result);
@@ -175,7 +200,7 @@ function renderCards(result) {
       <div class="kind">${escapeHtml(card.label)}</div>
       <h3 class="display">${escapeHtml(card.name)}</h3>
       ${card.note ? `<div class="note">${escapeHtml(card.note)}</div>` : ''}
-      <div class="score-line">Affinity-based compromise estimate (maximin): ${(card.score * 100).toFixed(0)}% - picked so the least-excited person still wins; members with no Qloo signal count at a cautious 50% prior, never ignored${card.groupOnly ? ' - group signal only, no per-member evidence' : ''}${typeof card.coverage === 'number' ? ` - evidence for ${Math.round(card.coverage * 100)}% of members` : ''}${card.sample ? ' - SAMPLE' : ''}</div>
+      <div class="score-line">Affinity-based compromise estimate (maximin): ${(card.score * 100).toFixed(0)}% - picked to maximize the least-excited member's affinity estimate; members with no Qloo signal count at a cautious 50% prior, never ignored${card.groupOnly ? ' - group signal only, no per-member evidence' : ''}${typeof card.coverage === 'number' ? ` - evidence for ${Math.round(card.coverage * 100)}% of members` : ''}${card.sample ? ' - SAMPLE' : ''}</div>
       ${overlapLine}
       ${evidenceLine}
       <div class="why">${whyRows}</div>
@@ -242,23 +267,23 @@ function renderBaselineToggle() {
 function renderConsensus(result) {
   const box = $('#consensus');
   if (!box || !result || !result.session) return;
-  const members = result.session.members.map((m) => m.label);
-  const allIn = members.length > 0 && members.every((m) => state.accepted.includes(m));
+  const members = electorate().map((m) => ({ mid: m.mid, label: (m.label || '').trim() || 'Someone' }));
+  const allIn = members.length > 0 && members.every((m) => state.accepted.includes(m.mid));
   if (allIn) {
     const picks = result.plan.map((c) => `${c.label}: ${c.name}`).join(' + ');
-    box.innerHTML = `<div class="agreed-banner">Deadlock broken - ${members.map(escapeHtml).join(', ')} all agreed.<br><strong>${escapeHtml(picks)}</strong><br><span class="agreed-sub">Consensus reached after ${state.vetoes.length} veto${state.vetoes.length === 1 ? '' : 'es'}. This is the group's decision, recorded from their own accept votes.</span></div>`;
+    box.innerHTML = `<div class="agreed-banner">Deadlock broken - ${members.map((m) => escapeHtml(m.label)).join(', ')} all agreed.<br><strong>${escapeHtml(picks)}</strong><br><span class="agreed-sub">Consensus reached after ${state.vetoes.length} veto${state.vetoes.length === 1 ? '' : 'es'}. This is the group's decision, recorded from their own accept votes.</span></div>`;
     return;
   }
   box.innerHTML = `<div class="consensus-box"><div class="consensus-q">Is everyone in? Each person answers for themselves:</div><div class="accept-row" id="acceptRow"></div></div>`;
   const row = box.querySelector('#acceptRow');
   members.forEach((m) => {
     const b = document.createElement('button');
-    const isIn = state.accepted.includes(m);
+    const isIn = state.accepted.includes(m.mid);
     b.className = 'accept-chip' + (isIn ? ' in' : '');
-    b.textContent = isIn ? `${m} is in` : `${m}?`;
+    b.textContent = isIn ? `${m.label} is in` : `${m.label}?`;
     b.addEventListener('click', () => {
-      if (state.accepted.includes(m)) state.accepted = state.accepted.filter((x) => x !== m);
-      else state.accepted.push(m);
+      if (state.accepted.includes(m.mid)) state.accepted = state.accepted.filter((x) => x !== m.mid);
+      else state.accepted.push(m.mid);
       syncShareHash();
       renderConsensus(state.lastPlan);
     });
@@ -279,7 +304,15 @@ function renderSharedProposal(result) {
     el.innerHTML = `
       <div class="kind">${escapeHtml(card.label)}</div>
       <h3 class="display">${escapeHtml(card.name)}</h3>
-      ${typeof card.score === 'number' ? `<div class="score-line">Affinity-based compromise estimate (maximin): ${(card.score * 100).toFixed(0)}%</div>` : ''}`;
+      ${typeof card.score === 'number' ? `<div class="score-line">Affinity-based compromise estimate (maximin): ${(card.score * 100).toFixed(0)}%</div>` : ''}
+      ${(card.why && card.why.length) ? `<div class="why">${card.why.map((w) => `
+        <div class="why-row">
+          <span class="who">${escapeHtml(w.member)}</span>
+          ${typeof w.affinity === 'number'
+            ? `<span class="bar"><i style="width:${Math.round(w.affinity * 100)}%"></i></span><span class="pct">${Math.round(w.affinity * 100)}%</span>`
+            : '<span class="bar"><i style="width:0%"></i></span><span class="pct">no data</span>'}
+          <span class="reason">${escapeHtml(w.reason || '')}</span>
+        </div>`).join('')}</div>` : ''}`;
     cardsEl.appendChild(el);
   }
   renderConsensus(result);
@@ -326,6 +359,7 @@ async function replan(why) {
     });
     renderTrace(result.trace);
     renderPlan(result);
+    syncShareHash();
   } catch (e) {
     errEl.textContent = e.message;
   }
@@ -351,12 +385,19 @@ async function init() {
   if (shared) {
     if (Array.isArray(shared.members) && shared.members.length) {
       state.members = shared.members.slice(0, 6).map((m) => ({
+        mid: typeof m.mid === 'string' ? m.mid.slice(0, 12) : undefined,
         label: String(m.label || ''), likes: String(m.likes || ''),
       }));
+      ensureMids();
     }
     if (shared.city) $('#city').value = String(shared.city).slice(0, 60);
     state.vetoes = Array.isArray(shared.vetoes) ? shared.vetoes : [];
-    state.accepted = Array.isArray(shared.accepted) ? shared.accepted : [];
+    // Votes from older links keyed on labels: map them onto member ids.
+    state.accepted = (Array.isArray(shared.accepted) ? shared.accepted : []).map((a) => {
+      if (state.members.some((m) => m.mid === a)) return a;
+      const byLabel = state.members.find((m) => (m.label || '').trim() === a);
+      return byLabel ? byLabel.mid : a;
+    });
     state.constraints = shared.constraints && typeof shared.constraints === 'object' ? shared.constraints : {};
     const note = $('#shareNote');
     if (note) {
@@ -372,9 +413,12 @@ async function init() {
       state.lastPlan = {
         mode: state.mode,
         session: { members: state.members.map((m) => ({ label: (m.label || '').trim() || 'Someone' })), city: shared.city },
-        plan: shared.plan.picks.map((p) => ({ domain: p.domain, label: p.label, name: p.name, score: p.score, id: p.id, why: [] })),
+        plan: shared.plan.picks.map((p) => ({
+          domain: p.domain, label: p.label, name: p.name, score: p.score, id: p.id,
+          why: Array.isArray(p.why) ? p.why : [],
+        })),
       };
-      if (state.planId && planIdOf(state.lastPlan.plan) !== state.planId) state.accepted = [];
+      if (state.planId && planIdOf(state.lastPlan.plan, currentCtx()) !== state.planId) state.accepted = [];
       renderSharedProposal(state.lastPlan);
     }
   }

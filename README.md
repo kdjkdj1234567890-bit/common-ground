@@ -40,9 +40,12 @@ chatbot guessing; with Qloo every suggestion carries an affinity provenance.
    one person loves and another vetoes.
 7. **Recovery** - when the leading pick has no per-member signal for someone,
    the agent does not just plug in the cautious prior: it widens the
-   retrieval net for that member (a deeper query) to tell "outside the first
-   retrieval window" apart from "genuinely no signal", and the trace shows
-   what it found.
+   retrieval net for that member (a deeper query, take=50). A hit proves the
+   pick sat outside the first retrieval window; a continued miss stays
+   inconclusive and is reported as honestly unknown. Recovery repeats
+   (bounded: max 3 passes, each member deep-queried at most once per domain)
+   because recovered evidence can change the leader - and the new leader's
+   own missing evidence gets checked too.
 8. **Replan** - vetoes add `filter.exclude.entities`; "make it cheaper" adds
    `filter.price_level.max=2`; the loop re-runs with the new constraints.
 
@@ -51,11 +54,21 @@ because an agent you can't watch is just a form.
 
 ## Evaluation
 
-Reproducible 10-scenario comparison of the taste-aware plan against a
-popularity-only baseline over the same Qloo catalog: the group pick differs
-from the generic pick in 30/30 domain comparisons. Full table, method and
-honest limitations in [EVALUATION.md](EVALUATION.md); re-run with
-`node scripts/evaluate.mjs`.
+Two reproducible comparisons against the deployed app, same 10 fixed
+scripted scenarios (`scripts/scenarios.mjs`), city fixed to New York:
+
+1. **Vs a popularity-only baseline** - the group pick differs from the
+   generic "top picks near you" answer in 30/30 domain comparisons.
+   Re-run: `node scripts/evaluate.mjs`
+2. **Maximin vs arithmetic-mean** - over the SAME candidate pool with the
+   SAME recovered evidence, isolating the aggregation rule (the project's
+   distinguishing claim): how often the two rules pick differently, how
+   much recovery shrinks unknown evidence pairs, and the least-happy-member
+   floor under each rule's pick. Re-run: `node scripts/benchmark.mjs`
+
+Full tables, method and honest limitations in [EVALUATION.md](EVALUATION.md).
+Both comparisons measure score behavior on scripted scenarios over Qloo
+aggregate affinities - not human satisfaction with the picks.
 
 ## Qloo usage (request -> result, redacted)
 
@@ -129,6 +142,9 @@ vercel deploy --prod
   guarantee any person will enjoy the pick.
 - Free-text likes that Qloo cannot ground are dropped (shown in the trace)
   rather than guessed.
+- The cautious 50% prior for members with no signal is a heuristic, not a
+  calibrated probability - a strongly evidenced pick with one unknown member
+  can still outrank a pick the whole group only mildly likes.
 - Place results depend on Qloo's coverage of the chosen city (any city can
   be typed; Qloo coverage varies).
 - Sessions are sequential, not simultaneous: the state travels in the

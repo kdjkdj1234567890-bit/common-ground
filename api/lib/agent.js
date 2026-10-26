@@ -159,8 +159,9 @@ function scoreAndPick(cands, resolved, domain, trace, opts = {}) {
     // Honesty rule: a member with no per-member Qloo signal for this
     // candidate is UNKNOWN, never a fabricated number. The card reports
     // how much evidence exists, and the maximin counts unknown members
-    // at a cautious 50% prior instead of dropping them - so a pick known
-    // for only 1 of 3 members cannot outrank a pick the whole group likes.
+    // at a cautious 50% prior instead of dropping them. The prior is a
+    // heuristic, not a guarantee: a pick strongly evidenced for one member
+    // can still edge out a pick the whole group only mildly likes.
     const affs = resolved.map((_, i) => {
       const a = cands.perMember[i].get(p.id);
       return typeof a === 'number' ? a : null;
@@ -225,13 +226,14 @@ function scoreAndPick(cands, resolved, domain, trace, opts = {}) {
 
 // Step 6b - agentic recovery: when the leading pick has no per-member
 // signal for someone, the agent does not just plug in the cautious prior.
-// It widens the retrieval net for that member (one deeper query) to tell
-// "the pick sat outside the first retrieval window" apart from "genuinely
-// no signal". Recovered affinities re-enter scoring; still-missing members
-// are reported as honestly unknown.
-async function recoverUnknowns(card, cands, resolved, domain, live, city, constraints, trace) {
+// It widens the retrieval net for that member (one deeper query, take=50).
+// A hit proves the pick sat outside the first retrieval window; a
+// continued miss stays inconclusive and is reported as honestly unknown -
+// absence from 50 results does not prove "genuinely no signal".
+const MAX_RECOVERY_PASSES = 3;
+async function recoverUnknowns(card, cands, resolved, domain, live, city, constraints, trace, targetIdx) {
   if (!live || !card || !cands || !cands.picks) return false;
-  const unknownIdx = card.why
+  const unknownIdx = targetIdx || card.why
     .map((w, i) => (w.affinity === null ? i : -1))
     .filter((i) => i >= 0 && resolved[i].entities.length > 0);
   if (!unknownIdx.length) return false;
@@ -262,6 +264,48 @@ async function recoverUnknowns(card, cands, resolved, domain, live, city, constr
   return recovered > 0;
 }
 
+// Recovery repeats (bounded): recovered evidence can change the leader,
+// and the new leader may have missing evidence of its own. Each member is
+// deep-queried at most once per domain, so the API budget stays bounded.
+async function recoverUntilStable(card, cands, resolved, domain, live, city, constraints, trace) {
+  if (!live || !card) return card;
+  const queried = new Set();
+  let passes = 0;
+  while (card && passes < MAX_RECOVERY_PASSES) {
+    const unknownIdx = card.why
+      .map((w, i) => (w.affinity === null ? i : -1))
+      .filter((i) => i >= 0 && resolved[i].entities.length > 0 && !queried.has(i));
+    if (!unknownIdx.length) break;
+    unknownIdx.forEach((i) => queried.add(i));
+    passes++;
+    await recoverUnknowns(card, cands, resolved, domain, live, city, constraints, trace, unknownIdx);
+    const next = scoreAndPick(cands, resolved, domain, trace, { quiet: true });
+    if (next && next.id !== card.id) {
+      tracePush(trace, 'recovery', `Recovered evidence changed the ${domain.label} leader to "${next.pick.name}" - checking the new leader's evidence too`, null);
+    }
+    card = next;
+  }
+  const remaining = card ? card.why.filter((w) => w.affinity === null).length : 0;
+  if (card && remaining > 0 && passes >= MAX_RECOVERY_PASSES) {
+    tracePush(trace, 'recovery', `Recovery budget (${MAX_RECOVERY_PASSES} passes) used - ${remaining} member signal${remaining === 1 ? '' : 's'} still unknown, kept at the cautious prior`, null);
+  }
+  return card;
+}
+
+// Count (member, candidate) pairs with no per-member evidence - the
+// quantity recovery is meant to shrink.
+function countUnknownPairs(cands, resolved) {
+  if (!cands || !cands.picks) return { unknown: 0, total: 0 };
+  let unknown = 0;
+  const total = cands.picks.length * resolved.length;
+  for (const p of cands.picks) {
+    for (let i = 0; i < resolved.length; i++) {
+      if (typeof cands.perMember[i].get(p.id) !== 'number') unknown++;
+    }
+  }
+  return { unknown, total };
+}
+
 // Full planning run.
 async function plan({ members, city, constraints = {} }) {
   const live = qloo.hasKey();
@@ -277,7 +321,7 @@ async function plan({ members, city, constraints = {} }) {
   for (const domain of DOMAINS) {
     const cands = await buildCandidates(domain, resolved, live, city, constraints, trace);
     const first = scoreAndPick(cands, resolved, domain, trace, { quiet: true });
-    if (first && live) await recoverUnknowns(first, cands, resolved, domain, live, city, constraints, trace);
+    if (first && live) await recoverUntilStable(first, cands, resolved, domain, live, city, constraints, trace);
     // final scoring (traced) reflects any recovered evidence
     const card = scoreAndPick(cands, resolved, domain, trace);
     if (card) planCards.push(card);
@@ -321,4 +365,45 @@ async function baseline({ city }) {
   return { mode: live ? 'live' : 'sample', baseline: out };
 }
 
-module.exports = { plan, baseline };
+// Benchmark: maximin vs arithmetic-mean aggregation over the SAME
+// candidate pool with the SAME recovered evidence - isolating the
+// aggregation rule, which is the project's distinguishing claim. Scripted
+// scenarios on Qloo aggregate affinities only: this measures score
+// behavior of the two rules, never human satisfaction.
+async function benchmark({ members, city }) {
+  const live = qloo.hasKey();
+  const trace = [];
+  const resolved = await resolveMembers(members, live, trace);
+  const domains = [];
+  for (const domain of DOMAINS) {
+    const cands = await buildCandidates(domain, resolved, live, city, {}, trace);
+    if (!cands || !cands.picks || !cands.picks.length) continue;
+    const before = countUnknownPairs(cands, resolved);
+    const first = scoreAndPick(cands, resolved, domain, trace, { quiet: true });
+    await recoverUntilStable(first, cands, resolved, domain, live, city, {}, trace);
+    const after = countUnknownPairs(cands, resolved);
+    // Re-score the final pool both ways. Candidates with zero per-member
+    // evidence are excluded: neither aggregation rule can rank them fairly.
+    const scored = cands.picks.map((p) => {
+      const raw = resolved.map((_, i) => cands.perMember[i].get(p.id));
+      const known = raw.filter((a) => typeof a === 'number');
+      if (!known.length) return null;
+      const affs = raw.map((a) => (typeof a === 'number' ? a : UNKNOWN_PRIOR));
+      return { name: p.name, min: Math.min(...affs), mean: affs.reduce((s, x) => s + x, 0) / affs.length, coverage: known.length / raw.length };
+    }).filter(Boolean);
+    if (!scored.length) continue;
+    const maximin = [...scored].sort((a, b) => b.min - a.min || b.mean - a.mean)[0];
+    const meanPick = [...scored].sort((a, b) => b.mean - a.mean || b.min - a.min)[0];
+    domains.push({
+      domain: domain.key, label: domain.label,
+      candidates: scored.length,
+      unknownBefore: before.unknown, unknownAfter: after.unknown, pairs: before.total,
+      maximin: { name: maximin.name, floor: +maximin.min.toFixed(3), mean: +maximin.mean.toFixed(3) },
+      meanPick: { name: meanPick.name, floor: +meanPick.min.toFixed(3), mean: +meanPick.mean.toFixed(3) },
+      differ: maximin.name !== meanPick.name,
+    });
+  }
+  return { mode: live ? 'live' : 'sample', city: cityParam(city), domains };
+}
+
+module.exports = { plan, baseline, benchmark };
