@@ -1,6 +1,6 @@
 # Common Ground
 
-**An agent that ends the "what should we do?" deadlock - powered by the Qloo taste graph.**
+**An agent built to help with the "what should we do?" deadlock - powered by the Qloo taste graph.**
 
 Three friends want a night out. One loves Frank Ocean and ramen, one loves Nolan
 and steakhouses, one loves lo-fi and vegan bowls. Twenty minutes of "anything is
