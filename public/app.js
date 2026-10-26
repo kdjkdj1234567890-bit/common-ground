@@ -69,7 +69,7 @@ function encodeShareState() {
     plan: state.lastPlan && state.lastPlan.plan && state.lastPlan.plan.length
       ? {
           pid: planIdOf(state.lastPlan.plan),
-          picks: state.lastPlan.plan.map((c) => ({ domain: c.domain, label: c.label, name: c.name, score: c.score })),
+          picks: state.lastPlan.plan.map((c) => ({ domain: c.domain, label: c.label, name: c.name, score: c.score, id: c.id })),
         }
       : null,
   };
@@ -374,7 +374,7 @@ async function init() {
       state.lastPlan = {
         mode: state.mode,
         session: { members: state.members.map((m) => ({ label: (m.label || '').trim() || 'Someone' })), city: shared.city },
-        plan: shared.plan.picks.map((p) => ({ domain: p.domain, label: p.label, name: p.name, score: p.score, why: [] })),
+        plan: shared.plan.picks.map((p) => ({ domain: p.domain, label: p.label, name: p.name, score: p.score, id: p.id, why: [] })),
       };
       if (state.planId && planIdOf(state.lastPlan.plan) !== state.planId) state.accepted = [];
       renderSharedProposal(state.lastPlan);
