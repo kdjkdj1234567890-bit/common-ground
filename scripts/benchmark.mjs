@@ -8,8 +8,10 @@
 // Default baseUrl: https://common-ground-kdjkdj1234567890-bits-projects.vercel.app
 //
 // Honesty notes: scripted scenarios over Qloo aggregate affinities. These
-// numbers compare two SCORING RULES on the same evidence; they say nothing
-// about real human satisfaction with the picks.
+// numbers compare SCORING RULES on the same evidence; they say nothing
+// about real human satisfaction with the picks. Both baselines are simple
+// heuristics we chose; neither is verified against any shipping product's
+// actual aggregation.
 
 import { SCENARIOS } from './scenarios.mjs';
 

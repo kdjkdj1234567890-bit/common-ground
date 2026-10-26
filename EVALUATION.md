@@ -78,8 +78,8 @@ then scores the final pool three ways:
   prior for unknowns. This isolates the aggregation rule (min vs mean) and
   nothing else.
 - **Naive mean-of-known**: rank by the mean over only the members who HAVE
-  evidence, ignoring unknown members entirely - the aggregation most group
-  recommendation features actually use.
+  evidence, ignoring unknown members entirely. A simple heuristic baseline
+  we chose; not verified against any shipping product's aggregation.
 
 Reproduce: `node scripts/benchmark.mjs` (same chunking as evaluate.mjs).
 
@@ -123,11 +123,12 @@ Summary (this run):
   unknowns priced identically on both sides, min-ranking and mean-ranking
   agree on this scenario set. The project claims no advantage over a
   prior-adjusted mean, and this run found none.
-- **Maximin vs naive mean-of-known: different picks in 15/30 decisions.**
-  The naive rule's pick sacrifices the least-happy member (floor strictly
-  lower) in 3/30 decisions; mean floor lift across all 30 decisions is
-  +2.7 points. The naive rule also crowns picks with evidence for only a
-  minority of members more often.
+- **Maximin vs the naive mean-of-known baseline: different picks in 15/30
+  decisions.** That baseline's pick sacrifices the least-happy member
+  (floor strictly lower) in 3/30 decisions; mean floor lift across all 30
+  decisions is +2.7 points. This shows maximin differs from ONE simple
+  straw-man rule on half the decisions - not that it beats real products,
+  whose aggregation we did not inspect.
 - Recovery reduced unknown (member, candidate) evidence pairs from 1,444
   to 1,387 of 1,800 (3.9%) - real but modest: recovery targets evidence
   for the leading pick, not pool-wide coverage.

@@ -393,8 +393,9 @@ async function benchmark({ members, city }) {
         name: p.name,
         min: Math.min(...affs),
         mean: affs.reduce((s, x) => s + x, 0) / affs.length,
-        // Naive rule most group apps actually use: average only the evidence
-        // you have and ignore members with none.
+        // Naive heuristic baseline: average only the evidence you have and
+        // ignore members with none. A chosen simple comparator - not
+        // verified against any shipping product's implementation.
         meanKnown: known.reduce((s, x) => s + x, 0) / known.length,
         coverage: known.length / raw.length,
       };
