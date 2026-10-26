@@ -354,9 +354,7 @@ async function init() {
         label: String(m.label || ''), likes: String(m.likes || ''),
       }));
     }
-    if (shared.city && [...$('#city').options].some((o) => o.value === shared.city || o.text === shared.city)) {
-      $('#city').value = shared.city;
-    }
+    if (shared.city) $('#city').value = String(shared.city).slice(0, 60);
     state.vetoes = Array.isArray(shared.vetoes) ? shared.vetoes : [];
     state.accepted = Array.isArray(shared.accepted) ? shared.accepted : [];
     state.constraints = shared.constraints && typeof shared.constraints === 'object' ? shared.constraints : {};
@@ -401,6 +399,14 @@ async function init() {
   });
   $('#loadSample').addEventListener('click', () => {
     state.members = SAMPLE_GROUP.map((m) => ({ ...m }));
+    renderMembers();
+  });
+  $('#loadClash')?.addEventListener('click', () => {
+    state.members = [
+      { label: 'Jisoo', likes: 'NewJeans, Korean barbecue, Studio Ghibli' },
+      { label: 'Frank', likes: 'Led Zeppelin, whiskey, Texas barbecue' },
+      { label: 'Aki', likes: 'Aphex Twin, arthouse cinema, natural wine' },
+    ];
     renderMembers();
   });
   $('#go').addEventListener('click', run);

@@ -38,7 +38,12 @@ chatbot guessing; with Qloo every suggestion carries an affinity provenance.
 6. **Maximin scoring** - the winning pick maximizes the *least* excited member's
    affinity (tie-break: group average). A compromise nobody hates beats a pick
    one person loves and another vetoes.
-7. **Replan** - vetoes add `filter.exclude.entities`; "make it cheaper" adds
+7. **Recovery** - when the leading pick has no per-member signal for someone,
+   the agent does not just plug in the cautious prior: it widens the
+   retrieval net for that member (a deeper query) to tell "outside the first
+   retrieval window" apart from "genuinely no signal", and the trace shows
+   what it found.
+8. **Replan** - vetoes add `filter.exclude.entities`; "make it cheaper" adds
    `filter.price_level.max=2`; the loop re-runs with the new constraints.
 
 The whole loop is rendered in the UI as a full step-by-step execution trace,
@@ -124,7 +129,8 @@ vercel deploy --prod
   guarantee any person will enjoy the pick.
 - Free-text likes that Qloo cannot ground are dropped (shown in the trace)
   rather than guessed.
-- Place results depend on Qloo's coverage of the chosen city.
+- Place results depend on Qloo's coverage of the chosen city (any city can
+  be typed; Qloo coverage varies).
 - Sessions are sequential, not simultaneous: the state travels in the
   share link, so the latest link holds the latest votes. Votes are
   self-reported (anyone holding the link can click any name) - fine for

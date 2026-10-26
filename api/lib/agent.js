@@ -153,7 +153,7 @@ function attributeSample(picks, resolved, trace, domain) {
 // they count as a cautious neutral prior, so incomplete coverage is
 // treated as uncertainty, never as a silent pass.
 const UNKNOWN_PRIOR = 0.5;
-function scoreAndPick(cands, resolved, domain, trace) {
+function scoreAndPick(cands, resolved, domain, trace, opts = {}) {
   if (!cands || !cands.picks || !cands.picks.length) return null;
   const scored = cands.picks.map((p) => {
     // Honesty rule: a member with no per-member Qloo signal for this
@@ -184,7 +184,7 @@ function scoreAndPick(cands, resolved, domain, trace) {
     || (b.min - a.min) || (b.coverage - a.coverage) || (b.avg - a.avg));
   const winner = scored[0];
   const lowOverlap = winner.min < 0.2;
-  tracePush(trace, 'score', `${domain.label}: "${winner.pick.name}" wins - compromise score ${(winner.min * 100).toFixed(0)}% (maximin; unknown members counted at a cautious ${(UNKNOWN_PRIOR * 100).toFixed(0)}% prior, evidence for ${Math.round(winner.coverage * 100)}% of members)${winner.groupOnly ? ' - group signal only' : ''}${lowOverlap ? ' - weak overlap, best available' : ''}`, null);
+  if (!opts.quiet) tracePush(trace, 'score', `${domain.label}: "${winner.pick.name}" wins - compromise estimate ${(winner.min * 100).toFixed(0)}% (maximin; unknown members counted at a cautious ${(UNKNOWN_PRIOR * 100).toFixed(0)}% prior, evidence for ${Math.round(winner.coverage * 100)}% of members)${winner.groupOnly ? ' - group signal only' : ''}${lowOverlap ? ' - weak overlap, best available' : ''}`, null);
   const explainBits = [];
   if (winner.pick.explain) {
     // Live Qloo shape: { 'signal.interests.entities': [{entity_id, score}] } -
@@ -209,7 +209,7 @@ function scoreAndPick(cands, resolved, domain, trace) {
       reason: a === null
         ? `no Qloo signal linking this pick to ${m.label}'s likes - shown as unknown, not guessed`
         : seeds.length
-          ? `aligns with ${m.label}'s ${seeds.join(' + ')} signal in Qloo's taste graph`
+          ? `aligns with ${m.label}'s own Qloo taste signal (grounded from: ${seeds.join(' + ')})`
           : `carried by the group signal`,
     };
   });
@@ -221,6 +221,45 @@ function scoreAndPick(cands, resolved, domain, trace) {
     lowOverlap,
     evidence: explainBits,
   };
+}
+
+// Step 6b - agentic recovery: when the leading pick has no per-member
+// signal for someone, the agent does not just plug in the cautious prior.
+// It widens the retrieval net for that member (one deeper query) to tell
+// "the pick sat outside the first retrieval window" apart from "genuinely
+// no signal". Recovered affinities re-enter scoring; still-missing members
+// are reported as honestly unknown.
+async function recoverUnknowns(card, cands, resolved, domain, live, city, constraints, trace) {
+  if (!live || !card || !cands || !cands.picks) return false;
+  const unknownIdx = card.why
+    .map((w, i) => (w.affinity === null ? i : -1))
+    .filter((i) => i >= 0 && resolved[i].entities.length > 0);
+  if (!unknownIdx.length) return false;
+  let recovered = 0;
+  for (const i of unknownIdx) {
+    const m = resolved[i];
+    const ids = m.entities.map((e) => e.id);
+    try {
+      const deeper = await qloo.insights(domain.target, {
+        entityIds: ids,
+        tags: domain.tags || [],
+        locationQuery: domain.target === 'urn:entity:place' ? cityParam(city) : undefined,
+        extra: { take: 60, ...(constraints.maxPrice ? { 'filter.price_level.max': constraints.maxPrice } : {}), ...(constraints.vetoes && constraints.vetoes.length ? { 'filter.exclude.entities': constraints.vetoes.join(',') } : {}) },
+      });
+      const before = cands.perMember[i].size;
+      for (const p of deeper) {
+        if (!cands.perMember[i].has(p.id)) cands.perMember[i].set(p.id, p.affinity !== undefined ? p.affinity : 0);
+      }
+      const hit = cands.perMember[i].has(card.id);
+      tracePush(trace, 'recovery', hit
+        ? `Agent noticed missing evidence for ${m.label} on "${card.name}" and widened the search net - found a direct signal after all (was outside the first retrieval window)`
+        : `Agent widened the search net for ${m.label} on "${card.name}" - still no direct signal, kept as honestly unknown`, null);
+      if (cands.perMember[i].size > before) recovered++;
+    } catch {
+      tracePush(trace, 'recovery', `Agent's deeper search for ${m.label} failed - kept as honestly unknown`, null);
+    }
+  }
+  return recovered > 0;
 }
 
 // Full planning run.
@@ -237,6 +276,9 @@ async function plan({ members, city, constraints = {} }) {
   const planCards = [];
   for (const domain of DOMAINS) {
     const cands = await buildCandidates(domain, resolved, live, city, constraints, trace);
+    const first = scoreAndPick(cands, resolved, domain, trace, { quiet: true });
+    if (first && live) await recoverUnknowns(first, cands, resolved, domain, live, city, constraints, trace);
+    // final scoring (traced) reflects any recovered evidence
     const card = scoreAndPick(cands, resolved, domain, trace);
     if (card) planCards.push(card);
   }
