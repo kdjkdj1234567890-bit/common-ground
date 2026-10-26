@@ -68,7 +68,10 @@ function renderMembers() {
       const i = +e.target.dataset.i;
       state.members[i][e.target.dataset.f] = e.target.value;
       state.members[i].sample = false;
-      if (state.planId) { state.accepted = []; state.planId = null; }
+      if (state.planId) {
+        state.accepted = []; state.planId = null;
+        if (state.lastPlan) renderConsensus(state.lastPlan);
+      }
       syncShareHash();
     });
   });
@@ -451,7 +454,10 @@ async function init() {
     });
   }
   $('#city').addEventListener('change', () => {
-    if (state.planId) { state.accepted = []; state.planId = null; }
+    if (state.planId) {
+      state.accepted = []; state.planId = null;
+      if (state.lastPlan) renderConsensus(state.lastPlan);
+    }
     syncShareHash();
   });
   $('#addMember').addEventListener('click', () => {
