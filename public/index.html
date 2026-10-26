@@ -44,6 +44,8 @@
         <option selected>Seoul</option>
       </select>
       <button class="primary" id="go" type="button">Find common ground</button>
+      <button class="ghost" id="shareBtn" type="button" style="margin-top:8px">invite the group - copy a share link</button>
+      <div class="share-note" id="shareNote" hidden></div>
       <div class="error" id="err"></div>
     </section>
 
@@ -73,7 +75,9 @@
     patterns across large groups - they are evidence of association, never a prediction about
     any individual. No names, emails, or other personal data are ever sent to Qloo; only taste
     signals (entity IDs) leave this app. The Qloo API key stays server-side.</p>
-    <p>Built for the Qloo Agentic Hackathon. Open source (MIT).</p>
+    <p>Multi-device by design: the whole session travels in a share link - everyone
+    answers from their own phone, no accounts, nothing stored on a server.
+    Built for the Qloo Agentic Hackathon. Open source (MIT).</p>
   </footer>
 </div>
 <script src="app.js"></script>

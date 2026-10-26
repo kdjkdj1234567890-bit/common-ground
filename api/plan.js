@@ -15,7 +15,14 @@ module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
   try {
     const body = await readBody(req);
-    const members = Array.isArray(body.members) ? body.members.slice(0, 6) : [];
+    const rawMembers = Array.isArray(body.members) ? body.members.slice(0, 6) : [];
+    const members = rawMembers.map((m) => ({
+      label: (m && (m.label || m.name)) || undefined,
+      // Tolerate comma-joined strings as well as arrays of likes.
+      likes: Array.isArray(m && m.likes)
+        ? m.likes
+        : String((m && m.likes) || '').split(',').map((x) => x.trim()).filter(Boolean),
+    })).filter((m) => m.likes.length > 0);
     if (members.length < 2) {
       return res.status(400).json({ error: 'Need at least 2 members to find common ground.' });
     }

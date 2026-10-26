@@ -46,8 +46,45 @@ function renderMembers() {
       const i = +e.target.dataset.i;
       state.members[i][e.target.dataset.f] = e.target.value;
       state.members[i].sample = false;
+      syncShareHash();
     });
   });
+}
+
+// --- Multi-device share links -----------------------------------------
+// The whole group session (members, city, vetoes, accepts, constraints)
+// serializes into the URL fragment. A link opened on another phone
+// hydrates the same session - real multi-device input with no accounts
+// and nothing stored on a server.
+function encodeShareState() {
+  const payload = {
+    v: 1,
+    members: state.members
+      .filter((m) => (m.likes || '').trim() || (m.label || '').trim())
+      .map((m) => ({ label: m.label || '', likes: m.likes || '' })),
+    city: $('#city').value,
+    vetoes: state.vetoes,
+    accepted: state.accepted,
+    constraints: state.constraints,
+  };
+  return btoa(unescape(encodeURIComponent(JSON.stringify(payload))))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function decodeShareState(s) {
+  try {
+    const b = s.replace(/-/g, '+').replace(/_/g, '/');
+    const p = JSON.parse(decodeURIComponent(escape(atob(b))));
+    return p && p.v === 1 ? p : null;
+  } catch { return null; }
+}
+
+function syncShareHash() {
+  try { history.replaceState(null, '', '#s=' + encodeShareState()); } catch { /* ignore */ }
+}
+
+function shareLink() {
+  return location.origin + location.pathname + '#s=' + encodeShareState();
 }
 
 function escapeHtml(s) {
@@ -136,6 +173,7 @@ function renderCards(result) {
   cardsEl.querySelectorAll('[data-veto]').forEach((b) => {
     b.addEventListener('click', () => {
       state.vetoes.push(b.dataset.veto);
+      syncShareHash();
       replan(`vetoed one pick`);
     });
   });
@@ -206,6 +244,7 @@ function renderConsensus(result) {
     b.addEventListener('click', () => {
       if (state.accepted.includes(m)) state.accepted = state.accepted.filter((x) => x !== m);
       else state.accepted.push(m);
+      syncShareHash();
       renderConsensus(state.lastPlan);
     });
     row.appendChild(b);
@@ -230,6 +269,7 @@ async function run() {
     });
     state.session = result.session;
     state.mode = result.mode;
+    syncShareHash();
     setModeBadge(result.mode, result.note);
     renderTrace(result.trace);
     renderPlan(result);
@@ -273,7 +313,41 @@ function setModeBadge(mode, note) {
 }
 
 async function init() {
+  const shared = location.hash.startsWith('#s=') ? decodeShareState(location.hash.slice(3)) : null;
+  if (shared) {
+    if (Array.isArray(shared.members) && shared.members.length) {
+      state.members = shared.members.slice(0, 6).map((m) => ({
+        label: String(m.label || ''), likes: String(m.likes || ''),
+      }));
+    }
+    if (shared.city && [...$('#city').options].some((o) => o.value === shared.city || o.text === shared.city)) {
+      $('#city').value = shared.city;
+    }
+    state.vetoes = Array.isArray(shared.vetoes) ? shared.vetoes : [];
+    state.accepted = Array.isArray(shared.accepted) ? shared.accepted : [];
+    state.constraints = shared.constraints && typeof shared.constraints === 'object' ? shared.constraints : {};
+    const note = $('#shareNote');
+    if (note) {
+      note.textContent = 'Group session loaded from a shared link - add or edit your own likes, then pass the link on. Nothing is stored on a server; the session travels in the link.';
+      note.hidden = false;
+    }
+  }
   renderMembers();
+  const shareBtn = $('#shareBtn');
+  if (shareBtn) {
+    shareBtn.addEventListener('click', async () => {
+      syncShareHash();
+      const link = shareLink();
+      try {
+        await navigator.clipboard.writeText(link);
+        shareBtn.textContent = 'link copied - send it to the group';
+      } catch {
+        window.prompt('Copy this link and send it to the group:', link);
+      }
+      setTimeout(() => { shareBtn.textContent = 'invite the group - copy a share link'; }, 2600);
+    });
+  }
+  $('#city').addEventListener('change', syncShareHash);
   $('#addMember').addEventListener('click', () => {
     if (state.members.length < 6) { state.members.push({ label: '', likes: '' }); renderMembers(); }
   });

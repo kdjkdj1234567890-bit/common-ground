@@ -72,6 +72,15 @@ honest limitations in [EVALUATION.md](EVALUATION.md); re-run with
   (hackathon rule: never in a browser app). All Qloo traffic goes through the
   `api/` serverless proxy.
 
+## Multi-device by design (no accounts, no server state)
+
+The whole group session - members, likes, city, vetoes, accept votes,
+constraints - serializes into a shareable link. Everyone opens it on their
+own phone, adds or edits their own likes, taps their own answer, and passes
+the link back to the group chat. Consensus is assembled from real
+per-device input, while nothing is ever stored on a server: the session
+travels in the link itself.
+
 ## Modes
 
 - **Live mode** (`QLOO_API_KEY` set): every pick and affinity comes from the
@@ -113,4 +122,6 @@ vercel deploy --prod
 - Free-text likes that Qloo cannot ground are dropped (shown in the trace)
   rather than guessed.
 - Place results depend on Qloo's coverage of the chosen city.
-- Session state is client-held; nothing is stored server-side.
+- Sessions are not simultaneous multi-user: the state travels in the share
+  link, so the latest link holds the latest votes. Nothing is stored
+  server-side, by design.
