@@ -128,7 +128,12 @@ Summary (this run):
   (floor strictly lower) in 3/30 decisions; mean floor lift across all 30
   decisions is +2.7 points. This shows maximin differs from ONE simple
   straw-man rule on half the decisions - not that it beats real products,
-  whose aggregation we did not inspect.
+  whose aggregation we did not inspect. Two further caveats: the floor
+  metric favors maximin by construction (maximin optimizes exactly that
+  minimum, so a nonnegative lift is largely a consequence of the objective,
+  not independent validation), and the naive comparison varies two factors
+  at once (aggregation rule AND missing-data handling), so it cannot
+  isolate which one drives the difference.
 - Recovery reduced unknown (member, candidate) evidence pairs from 1,444
   to 1,387 of 1,800 (3.9%) - real but modest: recovery targets evidence
   for the leading pick, not pool-wide coverage.

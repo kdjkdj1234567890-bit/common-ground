@@ -22,7 +22,7 @@ const state = {
 };
 
 const newMid = () => 'm' + Math.random().toString(36).slice(2, 9);
-// Votes key on a stable per-device member id, not the display label - two
+// Votes key on a stable member id (it travels in the share link), not the display label - two
 // members who happen to share a label stay distinct.
 function ensureMids() { state.members.forEach((m) => { if (!m.mid) m.mid = newMid(); }); }
 // The voting electorate: members with at least one like (same filter the
@@ -33,7 +33,13 @@ function electorate() {
 // Proposal identity covers the full decision context - picks, city, vetoes
 // and membership - not just the entity ids.
 function currentCtx() {
-  return { city: $('#city').value, vetoes: state.vetoes, memberMids: electorate().map((m) => m.mid) };
+  return {
+    city: $('#city').value,
+    vetoes: state.vetoes,
+    memberMids: electorate().map((m) => m.mid),
+    likes: electorate().map((m) => (m.likes || '').trim()).join(';'),
+    maxPrice: state.constraints.maxPrice || '',
+  };
 }
 
 const SAMPLE_GROUP = [
@@ -62,6 +68,7 @@ function renderMembers() {
       const i = +e.target.dataset.i;
       state.members[i][e.target.dataset.f] = e.target.value;
       state.members[i].sample = false;
+      if (state.planId) { state.accepted = []; state.planId = null; }
       syncShareHash();
     });
   });
@@ -80,7 +87,11 @@ function encodeShareState() {
       .map((m) => ({ mid: m.mid, label: m.label || '', likes: m.likes || '' })),
     city: $('#city').value,
     vetoes: state.vetoes,
-    accepted: state.accepted,
+    // Votes travel only while they still belong to this exact proposal in
+    // this exact context; an edit since the votes were cast drops them.
+    accepted: (state.lastPlan && state.lastPlan.plan && state.planId
+      && planIdOf(state.lastPlan.plan, currentCtx()) === state.planId)
+      ? state.accepted : [],
     constraints: state.constraints,
     plan: state.lastPlan && state.lastPlan.plan && state.lastPlan.plan.length
       ? {
@@ -111,7 +122,9 @@ function planIdOf(plan, ctx) {
   const ids = (plan || []).map((c) => c.id || c.name).join('|')
     + '#' + String((ctx && ctx.city) || '')
     + '#' + (ctx && ctx.vetoes ? [...ctx.vetoes].sort().join(',') : '')
-    + '#' + (ctx && ctx.memberMids ? ctx.memberMids.join(',') : '');
+    + '#' + (ctx && ctx.memberMids ? ctx.memberMids.join(',') : '')
+    + '#' + String((ctx && ctx.likes) || '')
+    + '#' + String((ctx && ctx.maxPrice) || '');
   let h = 0;
   for (let i = 0; i < ids.length; i++) { h = (h * 31 + ids.charCodeAt(i)) >>> 0; }
   return 'p' + h.toString(36);
@@ -437,7 +450,10 @@ async function init() {
       setTimeout(() => { shareBtn.textContent = 'invite the group - copy a share link'; }, 2600);
     });
   }
-  $('#city').addEventListener('change', syncShareHash);
+  $('#city').addEventListener('change', () => {
+    if (state.planId) { state.accepted = []; state.planId = null; }
+    syncShareHash();
+  });
   $('#addMember').addEventListener('click', () => {
     if (state.members.length < 6) { state.members.push({ label: '', likes: '' }); renderMembers(); }
   });
