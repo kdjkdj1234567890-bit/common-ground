@@ -27,10 +27,12 @@ async function post(path, body) {
   return r.json();
 }
 
-console.log('| Scenario | Domain | Maximin pick (floor) | Mean pick (floor) | Differ? | Unknown pairs before -> after |');
+const START = parseInt(process.env.START || '0', 10);
+const COUNT = parseInt(process.env.COUNT || String(SCENARIOS.length), 10);
+if (START === 0) console.log('| Scenario | Domain | Maximin pick (floor) | Mean pick (floor) | Differ? | Unknown pairs before -> after |');
 console.log('|---|---|---|---|---|---|');
 let n = 0, diff = 0, uBefore = 0, uAfter = 0, pairs = 0, liftSum = 0, liftPos = 0, errors = 0;
-for (const sc of SCENARIOS) {
+for (const sc of SCENARIOS.slice(START, START + COUNT)) {
   try {
     const res = await post('/api/benchmark', {
       city: CITY,
@@ -53,6 +55,6 @@ for (const sc of SCENARIOS) {
   await sleep(1500); // be gentle with the hackathon rate limit
 }
 console.log('');
-console.log(`Decisions: ${n} (${errors} errors). Rules picked differently: ${diff}/${n}.`);
+console.log(`Chunk start=${START} count=${COUNT}. Decisions: ${n} (${errors} errors). Rules picked differently: ${diff}/${n}.`);
 console.log(`Unknown evidence pairs: ${uBefore} -> ${uAfter} of ${pairs} (${uBefore ? (100 * (uBefore - uAfter) / uBefore).toFixed(0) : 0}% reduction by recovery).`);
 console.log(`Least-happy-member floor, maximin pick minus mean pick: mean lift ${(100 * liftSum / Math.max(n, 1)).toFixed(1)} pts; floor strictly higher in ${liftPos}/${n} decisions.`);

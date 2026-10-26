@@ -281,7 +281,7 @@ async function recoverUntilStable(card, cands, resolved, domain, live, city, con
     await recoverUnknowns(card, cands, resolved, domain, live, city, constraints, trace, unknownIdx);
     const next = scoreAndPick(cands, resolved, domain, trace, { quiet: true });
     if (next && next.id !== card.id) {
-      tracePush(trace, 'recovery', `Recovered evidence changed the ${domain.label} leader to "${next.pick.name}" - checking the new leader's evidence too`, null);
+      tracePush(trace, 'recovery', `Recovered evidence changed the ${domain.label} leader to "${next.name}" - checking the new leader's evidence too`, null);
     }
     card = next;
   }
